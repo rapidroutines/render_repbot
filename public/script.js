@@ -149,35 +149,47 @@ class ExerciseCounter {
         }
     }
 
-    async sendLandmarksToBackend(landmarks) {
-        try {
-            // Prepare the data to send
-            const data = {
-                landmarks: landmarks,
-                exerciseType: this.exerciseSelector.value
-            };
+    // Add these changes to your sendLandmarksToBackend method in script.js
 
-            // Send the data to the backend
-            const response = await fetch(`${this.backendUrl}/process_landmarks`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(data)
-            });
+async sendLandmarksToBackend(landmarks) {
+    try {
+        // Debug: Log that we're sending landmarks
+        console.log('Sending landmarks to backend...');
+        
+        // Prepare the data to send
+        const data = {
+            landmarks: landmarks,
+            exerciseType: this.exerciseSelector.value
+        };
 
-            if (!response.ok) {
-                throw new Error(`Server responded with status: ${response.status}`);
-            }
+        console.log(`Sending to: ${this.backendUrl}/process_landmarks`);
+        
+        // Send the data to the backend
+        const response = await fetch(`${this.backendUrl}/process_landmarks`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+            // Add these options for CORS issues
+            mode: 'cors',
+            credentials: 'same-origin'
+        });
 
-            // Process the response
-            const result = await response.json();
-            this.updateUIFromResponse(result);
-        } catch (error) {
-            console.error('Error sending landmarks to backend:', error);
-            // Handle error appropriately - maybe display a message to the user
+        if (!response.ok) {
+            throw new Error(`Server responded with status: ${response.status}`);
         }
+
+        // Process the response
+        const result = await response.json();
+        console.log('Received response:', result);
+        this.updateUIFromResponse(result);
+    } catch (error) {
+        console.error('Error sending landmarks to backend:', error);
+        // Display error to user
+        this.feedbackDisplay.innerText = `Error: ${error.message}`;
     }
+}
 
     updateUIFromResponse(result) {
         // Update rep counter if changed
