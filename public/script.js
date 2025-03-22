@@ -12,8 +12,8 @@ class ExerciseCounter {
         this.stage = "down";
         this.camera = null;
         
-        // Backend URL - update this with your Render deployment URL
-        this.backendUrl = "https://render-chatbot1-a8hc.onrender.com";
+        // Update this line in your script.js file
+        this.backendUrl = "https://render-chatbot1-a8hc.onrender.com"; // Replace with your actual Render URL
 
         // Setup canvas size responsively
         this.resizeCanvas();
