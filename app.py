@@ -16,11 +16,6 @@ CORS(app, resources={
     }
 })
 
-# Rest of your code remains the same...
-
-
-
-
 # Global state storage (could be replaced with a database in production)
 exercise_states = {}
 
@@ -42,13 +37,14 @@ def process_landmarks():
         data = request.json
         landmarks = data.get('landmarks', [])
         exercise_type = data.get('exerciseType', 'bicepCurl')
+        session_id = data.get('sessionId', request.remote_addr)  # Use provided session ID or fallback to IP
         
-        # Get client ID (in production, you'd use a proper authentication system)
-        client_id = request.remote_addr
+        # Generate a unique client key combining session ID and exercise type
+        client_key = f"{session_id}_{exercise_type}"
         
-        # Initialize state for this client if not exists
-        if client_id not in exercise_states:
-            exercise_states[client_id] = {
+        # Initialize state for this client if not exists or if exercise type changed
+        if client_key not in exercise_states:
+            exercise_states[client_key] = {
                 'repCounter': 0,
                 'stage': 'down',
                 'lastRepTime': 0,
@@ -56,10 +52,11 @@ def process_landmarks():
                 'leftArmStage': 'down',
                 'rightArmStage': 'down',
                 'leftArmHoldStart': 0,
-                'rightArmHoldStart': 0
+                'rightArmHoldStart': 0,
+                'exerciseType': exercise_type
             }
         
-        client_state = exercise_states[client_id]
+        client_state = exercise_states[client_key]
         current_time = int(time.time() * 1000)  # Current time in milliseconds
         rep_cooldown = 1000  # Prevent double counting
         hold_threshold = 500  # Time to hold at position
@@ -92,7 +89,7 @@ def process_landmarks():
             result = process_lunge(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
         
         # Update client state with the new values
-        exercise_states[client_id] = client_state
+        exercise_states[client_key] = client_state
         
         return jsonify(result)
     
