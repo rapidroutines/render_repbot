@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Exercise Rep Counter</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+</head>
+<body>
+    <div class="exercise-counter-container" id="exercise-container">
+        <video id="input-video" playsinline></video>
+        <canvas id="output-canvas"></canvas>
+        <div class="counter-display">Reps: <span id="rep-counter">0</span></div>
+        <div class="exercise-selector">
+            <select id="exercise-type">
+                <option value="bicepCurl">Bicep Curl</option>
+                <option value="squat">Squat</option>
+                <option value="pushup">Push-up</option>
+                <option value="shoulderPress">Shoulder Press</option>
+                <option value="handstand">Handstand</option>
+                <option value="pullUp">Pull Up</option>
+                <option value="situp">Sit-up</option>
+                <option value="jumpingJacks">Jumping Jacks</option>
+                <option value="lunge">Lunge</option>
+            </select>
+        </div>
+        <div class="feedback-display" id="feedback-display"></div>
+        <button id="start-camera" class="start-button">Start Camera</button>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
