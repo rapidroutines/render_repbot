@@ -8,6 +8,12 @@ import os
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
+
+app = Flask(__name__, static_folder='public', static_url_path='')
+CORS(app, resources={r"/*": {"origins": "https://render-chatbot-hi1x.onrender.com"}},
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+     allow_headers=["Content-Type", "Authorization"])
+
 # Global state storage (could be replaced with a database in production)
 exercise_states = {}
 
