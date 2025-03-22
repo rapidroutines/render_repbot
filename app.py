@@ -4,11 +4,23 @@ import math
 import time
 import os
 
+# Create Flask app
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
 # Global state storage (could be replaced with a database in production)
 exercise_states = {}
+
+@app.route('/')
+def index():
+    """Simple route for the root URL to verify the API is running"""
+    return jsonify({
+        'status': 'online',
+        'message': 'Exercise Counter API is running',
+        'endpoints': {
+            '/process_landmarks': 'POST - Process exercise landmarks from MediaPipe'
+        }
+    })
 
 @app.route('/process_landmarks', methods=['POST'])
 def process_landmarks():
@@ -1013,4 +1025,6 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
 
 # Run the app
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+    # Get port from environment variable or use default (8080)
+    port = int(os.environ.get("PORT", 8080))
+    app.run(host='0.0.0.0', port=port, debug=False)
