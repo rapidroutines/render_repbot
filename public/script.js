@@ -12,8 +12,12 @@ class ExerciseCounter {
         this.stage = "down";
         this.camera = null;
         
-        // Update this line in your script.js file
-        this.backendUrl = "https://render-chatbot1-a8hc.onrender.com"; // Replace with your actual Render URL
+        // Generate a unique session ID for this user
+        this.sessionId = this.generateSessionId();
+        console.log("Session ID created:", this.sessionId);
+        
+        // Backend URL - replace with your actual Render URL
+        this.backendUrl = "https://render-chatbot1-a8hc.onrender.com";
 
         // Setup canvas size responsively
         this.resizeCanvas();
@@ -24,6 +28,7 @@ class ExerciseCounter {
 
         // Listen for exercise changes
         this.exerciseSelector.addEventListener('change', () => {
+            console.log("Exercise changed to:", this.exerciseSelector.value);
             this.repCounter = 0;
             this.repDisplay.innerText = '0';
             this.stage = "down";
@@ -36,6 +41,11 @@ class ExerciseCounter {
         this.startButton.addEventListener('click', this.startCamera.bind(this));
     }
 
+    // Generate a random session ID for the user
+    generateSessionId() {
+        return 'user_' + Math.random().toString(36).substr(2, 9) + '_' + new Date().getTime();
+    }
+
     resizeCanvas() {
         const container = document.getElementById('exercise-container');
         const containerWidth = container.clientWidth;
@@ -46,6 +56,7 @@ class ExerciseCounter {
     }
 
     initializePose() {
+        console.log('Initializing MediaPipe Pose...');
         this.pose = new Pose({
             locateFile: (file) => {
                 return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
@@ -60,12 +71,14 @@ class ExerciseCounter {
         });
 
         this.pose.onResults(this.onResults.bind(this));
+        console.log('MediaPipe initialized successfully');
     }
 
     async startCamera() {
         try {
             // Hide start button
             this.startButton.style.display = 'none';
+            console.log("Starting camera...");
 
             // Check if getUserMedia is supported
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -102,6 +115,7 @@ class ExerciseCounter {
             });
 
             await this.camera.start();
+            console.log("Camera started successfully");
 
         } catch (error) {
             console.error('Error starting camera:', error);
@@ -149,47 +163,40 @@ class ExerciseCounter {
         }
     }
 
-    // Add these changes to your sendLandmarksToBackend method in script.js
+    async sendLandmarksToBackend(landmarks) {
+        try {
+            // Prepare the data to send
+            const data = {
+                landmarks: landmarks,
+                exerciseType: this.exerciseSelector.value,
+                sessionId: this.sessionId
+            };
 
-async sendLandmarksToBackend(landmarks) {
-    try {
-        // Debug: Log that we're sending landmarks
-        console.log('Sending landmarks to backend...');
-        
-        // Prepare the data to send
-        const data = {
-            landmarks: landmarks,
-            exerciseType: this.exerciseSelector.value
-        };
+            // Send the data to the backend
+            const response = await fetch(`${this.backendUrl}/process_landmarks`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data),
+                mode: 'cors'
+            });
 
-        console.log(`Sending to: ${this.backendUrl}/process_landmarks`);
-        
-        // Send the data to the backend
-        const response = await fetch(`${this.backendUrl}/process_landmarks`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(data),
-            // Add these options for CORS issues
-            mode: 'cors',
-            credentials: 'same-origin'
-        });
+            if (!response.ok) {
+                throw new Error(`Server responded with status: ${response.status}`);
+            }
 
-        if (!response.ok) {
-            throw new Error(`Server responded with status: ${response.status}`);
+            // Process the response
+            const result = await response.json();
+            this.updateUIFromResponse(result);
+        } catch (error) {
+            console.error('Error sending landmarks to backend:', error);
+            // Handle error appropriately - maybe display a message to the user
+            if (this.feedbackDisplay) {
+                this.feedbackDisplay.innerText = `Connection error: ${error.message}`;
+            }
         }
-
-        // Process the response
-        const result = await response.json();
-        console.log('Received response:', result);
-        this.updateUIFromResponse(result);
-    } catch (error) {
-        console.error('Error sending landmarks to backend:', error);
-        // Display error to user
-        this.feedbackDisplay.innerText = `Error: ${error.message}`;
     }
-}
 
     updateUIFromResponse(result) {
         // Update rep counter if changed
@@ -229,5 +236,6 @@ async sendLandmarksToBackend(landmarks) {
 
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', () => {
+    console.log("Initializing Exercise Counter...");
     new ExerciseCounter();
 });
