@@ -163,7 +163,14 @@ def process_bicep_curl(landmarks, state, current_time, rep_cooldown, hold_thresh
         # Calculate and store left arm angle
         if all(k in left_shoulder for k in ['x', 'y']) and all(k in left_elbow for k in ['x', 'y']) and all(k in left_wrist for k in ['x', 'y']):
             left_angle = calculate_angle(left_shoulder, left_elbow, left_wrist)
-            angles['L'] = left_angle
+            # Store angle with position data
+            angles['L'] = {
+                'value': left_angle,
+                'position': {
+                    'x': left_elbow['x'],
+                    'y': left_elbow['y']
+                }
+            }
 
             # Detect left arm curl
             if left_angle > 150:
@@ -177,13 +184,20 @@ def process_bicep_curl(landmarks, state, current_time, rep_cooldown, hold_thresh
         # Calculate and store right arm angle
         if all(k in right_shoulder for k in ['x', 'y']) and all(k in right_elbow for k in ['x', 'y']) and all(k in right_wrist for k in ['x', 'y']):
             right_angle = calculate_angle(right_shoulder, right_elbow, right_wrist)
-            angles['R'] = right_angle
+            # Store angle with position data
+            angles['R'] = {
+                'value': right_angle,
+                'position': {
+                    'x': right_elbow['x'],
+                    'y': right_elbow['y']
+                }
+            }
 
             # Detect right arm curl
-            if right_angle > 120:
+            if right_angle > 150:
                 state['rightArmStage'] = "down"
                 state['rightArmHoldStart'] = current_time
-            if right_angle < 60 and state['rightArmStage'] == "down":
+            if right_angle < 40 and state['rightArmStage'] == "down":
                 if current_time - state['rightArmHoldStart'] > hold_threshold:
                     right_curl_detected = True
                     state['rightArmStage'] = "up"
@@ -245,28 +259,54 @@ def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
         # Calculate left knee angle if landmarks are visible
         if all(k in left_hip for k in ['x', 'y']) and all(k in left_knee for k in ['x', 'y']) and all(k in left_ankle for k in ['x', 'y']):
             left_knee_angle = calculate_angle(left_hip, left_knee, left_ankle)
-            angles['L'] = left_knee_angle
+            angles['L'] = {
+                'value': left_knee_angle,
+                'position': {
+                    'x': left_knee['x'],
+                    'y': left_knee['y']
+                }
+            }
 
         # Calculate right knee angle if landmarks are visible
         if all(k in right_hip for k in ['x', 'y']) and all(k in right_knee for k in ['x', 'y']) and all(k in right_ankle for k in ['x', 'y']):
             right_knee_angle = calculate_angle(right_hip, right_knee, right_ankle)
-            angles['R'] = right_knee_angle
+            angles['R'] = {
+                'value': right_knee_angle,
+                'position': {
+                    'x': right_knee['x'],
+                    'y': right_knee['y']
+                }
+            }
 
         # Calculate average knee angle if both are available
         if left_knee_angle is not None and right_knee_angle is not None:
             avg_knee_angle = (left_knee_angle + right_knee_angle) / 2
-            angles['Avg'] = avg_knee_angle
+            # Position between both knees
+            mid_x = (left_knee['x'] + right_knee['x']) / 2
+            mid_y = (left_knee['y'] + right_knee['y']) / 2
+            angles['Avg'] = {
+                'value': avg_knee_angle,
+                'position': {
+                    'x': mid_x,
+                    'y': mid_y
+                }
+            }
         elif left_knee_angle is not None:
             avg_knee_angle = left_knee_angle
-            angles['Avg'] = avg_knee_angle
         elif right_knee_angle is not None:
             avg_knee_angle = right_knee_angle
-            angles['Avg'] = avg_knee_angle
 
         # Calculate hip height (normalized to image height)
         if all(k in left_hip for k in ['x', 'y']) and all(k in right_hip for k in ['x', 'y']):
             hip_height = (left_hip['y'] + right_hip['y']) / 2
-            angles['HipHeight'] = hip_height * 100  # Convert to percentage
+            mid_x = (left_hip['x'] + right_hip['x']) / 2
+            angles['HipHeight'] = {
+                'value': hip_height * 100,  # Convert to percentage
+                'position': {
+                    'x': mid_x,
+                    'y': hip_height
+                }
+            }
 
         # Process squat detection using both knee angles and hip height
         feedback = ""
@@ -336,28 +376,53 @@ def process_pushup(landmarks, state, current_time, rep_cooldown, hold_threshold)
         # Calculate left arm angle if landmarks are visible
         if all(k in left_shoulder for k in ['x', 'y']) and all(k in left_elbow for k in ['x', 'y']) and all(k in left_wrist for k in ['x', 'y']):
             left_elbow_angle = calculate_angle(left_shoulder, left_elbow, left_wrist)
-            angles['L'] = left_elbow_angle
+            angles['L'] = {
+                'value': left_elbow_angle,
+                'position': {
+                    'x': left_elbow['x'],
+                    'y': left_elbow['y']
+                }
+            }
 
         # Calculate right arm angle if landmarks are visible
         if all(k in right_shoulder for k in ['x', 'y']) and all(k in right_elbow for k in ['x', 'y']) and all(k in right_wrist for k in ['x', 'y']):
             right_elbow_angle = calculate_angle(right_shoulder, right_elbow, right_wrist)
-            angles['R'] = right_elbow_angle
+            angles['R'] = {
+                'value': right_elbow_angle,
+                'position': {
+                    'x': right_elbow['x'],
+                    'y': right_elbow['y']
+                }
+            }
 
         # Calculate average elbow angle if both are available
         if left_elbow_angle is not None and right_elbow_angle is not None:
             avg_elbow_angle = (left_elbow_angle + right_elbow_angle) / 2
-            angles['Avg'] = avg_elbow_angle
+            mid_x = (left_elbow['x'] + right_elbow['x']) / 2
+            mid_y = (left_elbow['y'] + right_elbow['y']) / 2
+            angles['Avg'] = {
+                'value': avg_elbow_angle,
+                'position': {
+                    'x': mid_x,
+                    'y': mid_y
+                }
+            }
         elif left_elbow_angle is not None:
             avg_elbow_angle = left_elbow_angle
-            angles['Avg'] = avg_elbow_angle
         elif right_elbow_angle is not None:
             avg_elbow_angle = right_elbow_angle
-            angles['Avg'] = avg_elbow_angle
 
         # Calculate body height (y-coordinate of shoulders)
         if all(k in left_shoulder for k in ['x', 'y']) and all(k in right_shoulder for k in ['x', 'y']):
             body_height = (left_shoulder['y'] + right_shoulder['y']) / 2
-            angles['Height'] = body_height * 100  # Convert to percentage
+            mid_x = (left_shoulder['x'] + right_shoulder['x']) / 2
+            angles['Height'] = {
+                'value': body_height * 100,  # Convert to percentage
+                'position': {
+                    'x': mid_x,
+                    'y': body_height
+                }
+            }
 
         # Check body alignment (straight back)
         if (all(k in left_shoulder for k in ['x', 'y']) and all(k in right_shoulder for k in ['x', 'y']) and 
@@ -377,7 +442,16 @@ def process_pushup(landmarks, state, current_time, rep_cooldown, hold_threshold)
                 alignment_angle = 180 - alignment_angle
 
             body_alignment = alignment_angle
-            angles['Align'] = body_alignment
+            # Position at midpoint between shoulders and hips
+            align_x = (shoulder_mid_x + hip_mid_x) / 2
+            align_y = (shoulder_mid_y + hip_mid_y) / 2
+            angles['Align'] = {
+                'value': body_alignment,
+                'position': {
+                    'x': align_x,
+                    'y': align_y
+                }
+            }
 
         # Process pushup detection using elbow angles, body height, and alignment
         feedback = ""
@@ -439,32 +513,62 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
         # Calculate left arm position and angle
         if all(k in left_shoulder for k in ['x', 'y']) and all(k in left_elbow for k in ['x', 'y']) and all(k in left_wrist for k in ['x', 'y']):
             left_elbow_angle = calculate_angle(left_wrist, left_elbow, left_shoulder)
-            angles['L'] = left_elbow_angle
+            angles['L'] = {
+                'value': left_elbow_angle,
+                'position': {
+                    'x': left_elbow['x'],
+                    'y': left_elbow['y']
+                }
+            }
 
             # Check if left wrist is above shoulder
             left_wrist_above_shoulder = left_wrist['y'] < left_shoulder['y']
-            angles['LWristPos'] = 1 if left_wrist_above_shoulder else 0
+            angles['LWristPos'] = {
+                'value': 1 if left_wrist_above_shoulder else 0,
+                'position': {
+                    'x': left_wrist['x'],
+                    'y': left_wrist['y']
+                }
+            }
 
         # Calculate right arm position and angle
         if all(k in right_shoulder for k in ['x', 'y']) and all(k in right_elbow for k in ['x', 'y']) and all(k in right_wrist for k in ['x', 'y']):
             right_elbow_angle = calculate_angle(right_wrist, right_elbow, right_shoulder)
-            angles['R'] = right_elbow_angle
+            angles['R'] = {
+                'value': right_elbow_angle,
+                'position': {
+                    'x': right_elbow['x'],
+                    'y': right_elbow['y']
+                }
+            }
 
             # Check if right wrist is above shoulder
             right_wrist_above_shoulder = right_wrist['y'] < right_shoulder['y']
-            angles['RWristPos'] = 1 if right_wrist_above_shoulder else 0
+            angles['RWristPos'] = {
+                'value': 1 if right_wrist_above_shoulder else 0,
+                'position': {
+                    'x': right_wrist['x'],
+                    'y': right_wrist['y']
+                }
+            }
 
         # Calculate average elbow angle if both are available
         avg_elbow_angle = None
         if left_elbow_angle is not None and right_elbow_angle is not None:
             avg_elbow_angle = (left_elbow_angle + right_elbow_angle) / 2
-            angles['Avg'] = avg_elbow_angle
+            mid_x = (left_elbow['x'] + right_elbow['x']) / 2
+            mid_y = (left_elbow['y'] + right_elbow['y']) / 2
+            angles['Avg'] = {
+                'value': avg_elbow_angle,
+                'position': {
+                    'x': mid_x,
+                    'y': mid_y
+                }
+            }
         elif left_elbow_angle is not None:
             avg_elbow_angle = left_elbow_angle
-            angles['Avg'] = avg_elbow_angle
         elif right_elbow_angle is not None:
             avg_elbow_angle = right_elbow_angle
-            angles['Avg'] = avg_elbow_angle
 
         # Determine arm positions for stage detection
         both_wrists_below_shoulder = not left_wrist_above_shoulder and not right_wrist_above_shoulder
@@ -584,11 +688,41 @@ def process_handstand(landmarks, state, current_time, rep_cooldown, hold_thresho
 
         # Store angles for UI
         angles = {
-            'LBody': left_body_angle,
-            'RBody': right_body_angle,
-            'LLeg': left_leg_angle,
-            'RLeg': right_leg_angle,
-            'WristRatio': wrist_distance_ratio
+            'LBody': {
+                'value': left_body_angle,
+                'position': {
+                    'x': left_hip['x'],
+                    'y': left_hip['y']
+                }
+            },
+            'RBody': {
+                'value': right_body_angle,
+                'position': {
+                    'x': right_hip['x'],
+                    'y': right_hip['y']
+                }
+            },
+            'LLeg': {
+                'value': left_leg_angle,
+                'position': {
+                    'x': left_knee['x'],
+                    'y': left_knee['y']
+                }
+            },
+            'RLeg': {
+                'value': right_leg_angle,
+                'position': {
+                    'x': right_knee['x'],
+                    'y': right_knee['y']
+                }
+            },
+            'WristRatio': {
+                'value': wrist_distance_ratio,
+                'position': {
+                    'x': (left_wrist['x'] + right_wrist['x']) / 2,
+                    'y': (left_wrist['y'] + right_wrist['y']) / 2
+                }
+            }
         }
 
         # Generate feedback based on form
@@ -681,7 +815,13 @@ def process_pull_up(landmarks, state, current_time, rep_cooldown):
                 {'x': left_elbow['x'], 'y': left_elbow['y']},
                 {'x': left_wrist['x'], 'y': left_wrist['y']}
             )
-            angles['L'] = left_angle
+            angles['L'] = {
+                'value': left_angle,
+                'position': {
+                    'x': left_elbow['x'],
+                    'y': left_elbow['y']
+                }
+            }
 
         if right_valid:
             right_angle = calculate_angle(
@@ -689,19 +829,31 @@ def process_pull_up(landmarks, state, current_time, rep_cooldown):
                 {'x': right_elbow['x'], 'y': right_elbow['y']},
                 {'x': right_wrist['x'], 'y': right_wrist['y']}
             )
-            angles['R'] = right_angle
+            angles['R'] = {
+                'value': right_angle,
+                'position': {
+                    'x': right_elbow['x'],
+                    'y': right_elbow['y']
+                }
+            }
 
         # Average the angles if both sides are valid, otherwise use the valid one
         arm_angle = None
         if left_valid and right_valid:
             arm_angle = (left_angle + right_angle) / 2
-            angles['Avg'] = arm_angle
+            mid_x = (left_elbow['x'] + right_elbow['x']) / 2
+            mid_y = (left_elbow['y'] + right_elbow['y']) / 2
+            angles['Avg'] = {
+                'value': arm_angle,
+                'position': {
+                    'x': mid_x,
+                    'y': mid_y
+                }
+            }
         elif left_valid:
             arm_angle = left_angle
-            angles['Avg'] = arm_angle
         else:
             arm_angle = right_angle
-            angles['Avg'] = arm_angle
 
         # Store the previous stage to detect transitions
         previous_stage = state['stage']
@@ -771,7 +923,13 @@ def process_situp(landmarks, state, current_time, rep_cooldown, hold_threshold):
                 {'x': left_hip['x'], 'y': left_hip['y']},
                 {'x': left_knee['x'], 'y': left_knee['y']}
             )
-            angles['L'] = left_angle
+            angles['L'] = {
+                'value': left_angle,
+                'position': {
+                    'x': left_hip['x'],
+                    'y': left_hip['y']
+                }
+            }
 
             # Calculate angle for right side
             right_angle = calculate_angle(
@@ -779,11 +937,25 @@ def process_situp(landmarks, state, current_time, rep_cooldown, hold_threshold):
                 {'x': right_hip['x'], 'y': right_hip['y']},
                 {'x': right_knee['x'], 'y': right_knee['y']}
             )
-            angles['R'] = right_angle
+            angles['R'] = {
+                'value': right_angle,
+                'position': {
+                    'x': right_hip['x'],
+                    'y': right_hip['y']
+                }
+            }
 
             # Calculate average angle (for more stability)
             avg_angle = (left_angle + right_angle) / 2
-            angles['Avg'] = avg_angle
+            mid_x = (left_hip['x'] + right_hip['x']) / 2
+            mid_y = (left_hip['y'] + right_hip['y']) / 2
+            angles['Avg'] = {
+                'value': avg_angle,
+                'position': {
+                    'x': mid_x,
+                    'y': mid_y
+                }
+            }
 
             # Rep counting logic using average angle for more stability
             feedback = ""
@@ -873,16 +1045,64 @@ def process_jumping_jacks(landmarks, state, current_time, rep_cooldown, hold_thr
         left_hip_angle = calculate_angle(left_shoulder, left_hip, left_knee)
         right_hip_angle = calculate_angle(right_shoulder, right_hip, right_knee)
 
-        # Store angles for display
+        # Store angles for display with positions
         angles = {
-            'LArm': left_arm_angle,
-            'RArm': right_arm_angle,
-            'LShoulder': left_shoulder_angle,
-            'RShoulder': right_shoulder_angle,
-            'LLeg': left_leg_angle,
-            'RLeg': right_leg_angle,
-            'LHip': left_hip_angle,
-            'RHip': right_hip_angle
+            'LArm': {
+                'value': left_arm_angle,
+                'position': {
+                    'x': left_elbow['x'],
+                    'y': left_elbow['y']
+                }
+            },
+            'RArm': {
+                'value': right_arm_angle,
+                'position': {
+                    'x': right_elbow['x'],
+                    'y': right_elbow['y']
+                }
+            },
+            'LShoulder': {
+                'value': left_shoulder_angle,
+                'position': {
+                    'x': left_shoulder['x'],
+                    'y': left_shoulder['y']
+                }
+            },
+            'RShoulder': {
+                'value': right_shoulder_angle,
+                'position': {
+                    'x': right_shoulder['x'],
+                    'y': right_shoulder['y']
+                }
+            },
+            'LLeg': {
+                'value': left_leg_angle,
+                'position': {
+                    'x': left_knee['x'],
+                    'y': left_knee['y']
+                }
+            },
+            'RLeg': {
+                'value': right_leg_angle,
+                'position': {
+                    'x': right_knee['x'],
+                    'y': right_knee['y']
+                }
+            },
+            'LHip': {
+                'value': left_hip_angle,
+                'position': {
+                    'x': left_hip['x'],
+                    'y': left_hip['y']
+                }
+            },
+            'RHip': {
+                'value': right_hip_angle,
+                'position': {
+                    'x': right_hip['x'],
+                    'y': right_hip['y']
+                }
+            }
         }
 
         # Detect jumping jack phases using angles
@@ -978,14 +1198,46 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
         # Determine which leg is in front (lower knee is the front leg)
         front_leg_angle = right_leg_angle if left_knee['y'] > right_knee['y'] else left_leg_angle
         back_leg_angle = left_leg_angle if left_knee['y'] > right_knee['y'] else right_leg_angle
+        front_knee = right_knee if left_knee['y'] > right_knee['y'] else left_knee
+        back_knee = left_knee if left_knee['y'] > right_knee['y'] else right_knee
         
-        # Store angles for display
+        # Store angles for display with positions
         angles = {
-            'LLeg': left_leg_angle,
-            'RLeg': right_leg_angle,
-            'Front': front_leg_angle,
-            'Back': back_leg_angle,
-            'KneeDiff': knee_height_diff * 100  # Convert to percentage
+            'LLeg': {
+                'value': left_leg_angle,
+                'position': {
+                    'x': left_knee['x'],
+                    'y': left_knee['y']
+                }
+            },
+            'RLeg': {
+                'value': right_leg_angle,
+                'position': {
+                    'x': right_knee['x'],
+                    'y': right_knee['y']
+                }
+            },
+            'Front': {
+                'value': front_leg_angle,
+                'position': {
+                    'x': front_knee['x'],
+                    'y': front_knee['y']
+                }
+            },
+            'Back': {
+                'value': back_leg_angle,
+                'position': {
+                    'x': back_knee['x'],
+                    'y': back_knee['y']
+                }
+            },
+            'KneeDiff': {
+                'value': knee_height_diff * 100,  # Convert to percentage
+                'position': {
+                    'x': (left_knee['x'] + right_knee['x']) / 2,
+                    'y': (left_knee['y'] + right_knee['y']) / 2
+                }
+            }
         }
 
         # Track standing position - both legs relatively straight
