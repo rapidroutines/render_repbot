@@ -180,10 +180,10 @@ def process_bicep_curl(landmarks, state, current_time, rep_cooldown, hold_thresh
             angles['R'] = right_angle
 
             # Detect right arm curl
-            if right_angle > 150:
+            if right_angle > 120:
                 state['rightArmStage'] = "down"
                 state['rightArmHoldStart'] = current_time
-            if right_angle < 40 and state['rightArmStage'] == "down":
+            if right_angle < 60 and state['rightArmStage'] == "down":
                 if current_time - state['rightArmHoldStart'] > hold_threshold:
                     right_curl_detected = True
                     state['rightArmStage'] = "up"
