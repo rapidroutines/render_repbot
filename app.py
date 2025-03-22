@@ -1011,5 +1011,6 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
 
 
 # Run the app
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 8080)))
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port)
