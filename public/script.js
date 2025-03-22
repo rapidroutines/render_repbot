@@ -222,14 +222,31 @@ class ExerciseCounter {
     }
 
     displayAngles(angles) {
-        // Display angles on the canvas if provided by the backend
-        this.ctx.fillStyle = "white";
-        this.ctx.font = "18px Arial";
+        // Display angles directly on the body parts
+        this.ctx.font = "bold 16px Arial";
+        this.ctx.lineWidth = 3;
         
-        let y = 30;
-        for (const [key, value] of Object.entries(angles)) {
-            this.ctx.fillText(`${key}: ${Math.round(value)}°`, 10, y);
-            y += 25;
+        // Loop through all the angles and display them at their respective positions
+        for (const [key, data] of Object.entries(angles)) {
+            if (data.position && data.value !== undefined) {
+                // Convert normalized coordinates to canvas coordinates
+                const x = data.position.x * this.canvas.width;
+                const y = data.position.y * this.canvas.height;
+                
+                // Create background for better visibility
+                const text = `${key}: ${Math.round(data.value)}°`;
+                const textWidth = this.ctx.measureText(text).width;
+                
+                // Draw background rectangle
+                this.ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+                this.ctx.fillRect(x - textWidth/2 - 5, y - 20, textWidth + 10, 25);
+                
+                // Draw text
+                this.ctx.fillStyle = "white";
+                this.ctx.textAlign = "center";
+                this.ctx.textBaseline = "middle";
+                this.ctx.fillText(text, x, y - 7);
+            }
         }
     }
 }
