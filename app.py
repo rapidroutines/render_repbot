@@ -239,7 +239,7 @@ def process_bicep_curl(landmarks, state, current_time, rep_cooldown, hold_thresh
 
 
 def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for squat exercise"""
+    """Process landmarks for squat exercise with improved detection accuracy"""
     try:
         # Get landmarks for both legs
         left_hip = landmarks[23]
@@ -248,13 +248,59 @@ def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
         right_hip = landmarks[24]
         right_knee = landmarks[26]
         right_ankle = landmarks[28]
+        
+        # Get additional landmarks for better squat detection
+        left_shoulder = landmarks[11]
+        right_shoulder = landmarks[12]
 
         # Variables to store angles and status
         left_knee_angle = None
         right_knee_angle = None
         avg_knee_angle = None
-        hip_height = None
+        hip_shoulder_distance = None
+        hip_ankle_distance = None
         angles = {}
+        
+        # Get initial hip height on first detection if not already set
+        if 'initial_hip_height' not in state:
+            if all(k in left_hip for k in ['x', 'y']) and all(k in right_hip for k in ['x', 'y']):
+                state['initial_hip_height'] = (left_hip['y'] + right_hip['y']) / 2
+                print(f"Initial hip height set to: {state['initial_hip_height']}")
+        
+        # Calculate relative hip height to initial position (for squatting depth)
+        relative_hip_height = None
+        if 'initial_hip_height' in state:
+            if all(k in left_hip for k in ['x', 'y']) and all(k in right_hip for k in ['x', 'y']):
+                current_hip_height = (left_hip['y'] + right_hip['y']) / 2
+                relative_hip_height = (current_hip_height - state['initial_hip_height']) / state['initial_hip_height']
+                # Store as a percentage increase (positive value means hips are lower than starting position)
+                hip_height_pct = relative_hip_height * 100
+                
+                mid_x = (left_hip['x'] + right_hip['x']) / 2
+                angles['HipDrop'] = {
+                    'value': hip_height_pct,
+                    'position': {
+                        'x': mid_x,
+                        'y': current_hip_height
+                    }
+                }
+
+        # Calculate distance between shoulders and hips (for upper body angle)
+        if all(k in left_shoulder for k in ['x', 'y']) and all(k in right_shoulder for k in ['x', 'y']) and \
+           all(k in left_hip for k in ['x', 'y']) and all(k in right_hip for k in ['x', 'y']):
+            shoulder_mid_y = (left_shoulder['y'] + right_shoulder['y']) / 2
+            hip_mid_y = (left_hip['y'] + right_hip['y']) / 2
+            hip_shoulder_distance = abs(hip_mid_y - shoulder_mid_y)
+            
+            # Store for debugging
+            shoulder_mid_x = (left_shoulder['x'] + right_shoulder['x']) / 2
+            angles['TorsoLen'] = {
+                'value': hip_shoulder_distance * 100,
+                'position': {
+                    'x': shoulder_mid_x,
+                    'y': (shoulder_mid_y + hip_mid_y) / 2
+                }
+            }
 
         # Calculate left knee angle if landmarks are visible
         if all(k in left_hip for k in ['x', 'y']) and all(k in left_knee for k in ['x', 'y']) and all(k in left_ankle for k in ['x', 'y']):
@@ -296,43 +342,80 @@ def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
         elif right_knee_angle is not None:
             avg_knee_angle = right_knee_angle
 
-        # Calculate hip height (normalized to image height)
-        if all(k in left_hip for k in ['x', 'y']) and all(k in right_hip for k in ['x', 'y']):
-            hip_height = (left_hip['y'] + right_hip['y']) / 2
-            mid_x = (left_hip['x'] + right_hip['x']) / 2
-            angles['HipHeight'] = {
-                'value': hip_height * 100,  # Convert to percentage
+        # Calculate hip to ankle distance (for squat width check)
+        if all(k in left_hip for k in ['x', 'y']) and all(k in left_ankle for k in ['x', 'y']) and \
+           all(k in right_hip for k in ['x', 'y']) and all(k in right_ankle for k in ['x', 'y']):
+            hip_mid_x = (left_hip['x'] + right_hip['x']) / 2
+            ankle_mid_x = (left_ankle['x'] + right_ankle['x']) / 2
+            hip_ankle_distance = abs(hip_mid_x - ankle_mid_x)
+            
+            # Store for debugging
+            ankle_mid_y = (left_ankle['y'] + right_ankle['y']) / 2
+            angles['StanceWidth'] = {
+                'value': hip_ankle_distance * 100,
                 'position': {
-                    'x': mid_x,
-                    'y': hip_height
+                    'x': (hip_mid_x + ankle_mid_x) / 2,
+                    'y': (ankle_mid_y + ankle_mid_y) / 2
                 }
             }
 
-        # Process squat detection using both knee angles and hip height
+        # Process squat detection using knee angles and relative hip height
         feedback = ""
-        if avg_knee_angle is not None and hip_height is not None:
-            # Standing position detection (straight legs and higher hip position)
-            if avg_knee_angle > 160 and hip_height < 0.6:
+        
+        # IMPROVED DETECTION LOGIC
+        # We now use both knee angle and relative hip position for more accurate detection
+        # This helps with different camera angles and body proportions
+        
+        # Standing position detection (straight legs)
+        if avg_knee_angle is not None and avg_knee_angle > 150:
+            if state['stage'] != "up":
                 state['stage'] = "up"
                 state['holdStart'] = current_time
-                feedback = "Standing position detected"
-
-            # Squat position detection (bent knees and lower hip position)
-            if avg_knee_angle < 120 and hip_height > 0.65 and state['stage'] == "up":
-                if current_time - state['holdStart'] > hold_threshold and current_time - state['lastRepTime'] > rep_cooldown:
-                    state['stage'] = "down"
-                    state['repCounter'] += 1
-                    state['lastRepTime'] = current_time
-                    feedback = "Rep complete! Good squat depth."
+                feedback = "Standing position - ready to squat"
+        
+        # Squat position detection (bent knees)
+        # We use a more lenient knee angle threshold (130 degrees) and check relative hip drop
+        if avg_knee_angle is not None and avg_knee_angle < 130:
+            # If we have relative hip height measurement, use it as an additional check
+            squat_depth_confirmed = False
+            
+            if relative_hip_height is not None:
+                # A positive value means hips are lower than starting position
+                if relative_hip_height > 0.1:  # Hip dropped at least 10% from starting position
+                    squat_depth_confirmed = True
+                    feedback = "Good squat depth!"
+            else:
+                # Fall back to just knee angle if we don't have relative hip height
+                squat_depth_confirmed = True
+            
+            if squat_depth_confirmed and state['stage'] == "up":
+                if current_time - state['holdStart'] > hold_threshold:
+                    if current_time - state['lastRepTime'] > rep_cooldown:
+                        state['stage'] = "down"
+                        state['repCounter'] += 1
+                        state['lastRepTime'] = current_time
+                        feedback = "Rep complete! Great squat."
                 else:
                     feedback = "Hold squat position"
-
-            # Form feedback
-            if state['stage'] == "down" and avg_knee_angle > 130:
-                feedback = "Squat deeper for a better workout"
-            elif state['stage'] == "up" and hip_height > 0.6:
-                feedback = "Stand up straighter"
-
+            elif squat_depth_confirmed and state['stage'] == "down":
+                feedback = "Return to standing position"
+        
+        # Form feedback for better squats
+        if avg_knee_angle is not None:
+            if state['stage'] == "up" and 130 < avg_knee_angle < 150:
+                feedback = "Begin squat - bend knees more"
+            elif state['stage'] == "down" and avg_knee_angle > 140:
+                feedback = "Return to standing position fully"
+        
+        # More detailed form feedback if we have all the measurements
+        if hip_ankle_distance is not None and hip_ankle_distance < 0.05:
+            feedback = "Wider stance recommended for stability"
+        
+        # Debug information
+        if 'initial_hip_height' in state:
+            print(f"Current state: {state['stage']}, Knee angle: {avg_knee_angle}, " +
+                  f"Hip relative: {relative_hip_height if relative_hip_height is not None else 'N/A'}")
+        
         return {
             'repCounter': state['repCounter'],
             'stage': state['stage'],
@@ -348,9 +431,8 @@ def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
             'feedback': f"Error: {str(e)}"
         }
 
-
 def process_pushup(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for pushup exercise"""
+    """Process landmarks for pushup exercise with improved detection accuracy"""
     try:
         # Get landmarks for both arms and shoulders
         left_shoulder = landmarks[11]
@@ -360,10 +442,14 @@ def process_pushup(landmarks, state, current_time, rep_cooldown, hold_threshold)
         right_elbow = landmarks[14]
         right_wrist = landmarks[16]
 
-        # Additional body points for height/position tracking
+        # Additional body points for better pushup detection
         nose = landmarks[0]
         left_hip = landmarks[23]
         right_hip = landmarks[24]
+        left_knee = landmarks[25]
+        right_knee = landmarks[26]
+        left_ankle = landmarks[27]
+        right_ankle = landmarks[28]
 
         # Variables to store angles and status
         left_elbow_angle = None
@@ -372,7 +458,21 @@ def process_pushup(landmarks, state, current_time, rep_cooldown, hold_threshold)
         body_height = None
         body_alignment = None
         angles = {}
-
+        
+        # Save reference points if not already saved
+        if 'reference_height' not in state:
+            if all(k in left_shoulder for k in ['x', 'y']) and all(k in right_shoulder for k in ['x', 'y']):
+                # Average shoulder height in up position
+                state['reference_height'] = (left_shoulder['y'] + right_shoulder['y']) / 2
+                print(f"Reference height set to: {state['reference_height']}")
+                
+                # Also record typical distance between shoulders and hips for alignment checks
+                if all(k in left_hip for k in ['x', 'y']) and all(k in right_hip for k in ['x', 'y']):
+                    shoulder_mid_y = (left_shoulder['y'] + right_shoulder['y']) / 2
+                    hip_mid_y = (left_hip['y'] + right_hip['y']) / 2
+                    state['torso_length'] = abs(shoulder_mid_y - hip_mid_y)
+                    print(f"Torso length set to: {state['torso_length']}")
+        
         # Calculate left arm angle if landmarks are visible
         if all(k in left_shoulder for k in ['x', 'y']) and all(k in left_elbow for k in ['x', 'y']) and all(k in left_wrist for k in ['x', 'y']):
             left_elbow_angle = calculate_angle(left_shoulder, left_elbow, left_wrist)
@@ -412,69 +512,147 @@ def process_pushup(landmarks, state, current_time, rep_cooldown, hold_threshold)
         elif right_elbow_angle is not None:
             avg_elbow_angle = right_elbow_angle
 
-        # Calculate body height (y-coordinate of shoulders)
-        if all(k in left_shoulder for k in ['x', 'y']) and all(k in right_shoulder for k in ['x', 'y']):
-            body_height = (left_shoulder['y'] + right_shoulder['y']) / 2
-            mid_x = (left_shoulder['x'] + right_shoulder['x']) / 2
-            angles['Height'] = {
-                'value': body_height * 100,  # Convert to percentage
-                'position': {
-                    'x': mid_x,
-                    'y': body_height
-                }
-            }
-
-        # Check body alignment (straight back)
+        # Calculate body alignment (straight back)
+        # This is crucial for proper push-up form
+        body_alignment_score = 0
         if (all(k in left_shoulder for k in ['x', 'y']) and all(k in right_shoulder for k in ['x', 'y']) and 
-            all(k in left_hip for k in ['x', 'y']) and all(k in right_hip for k in ['x', 'y'])):
+            all(k in left_hip for k in ['x', 'y']) and all(k in right_hip for k in ['x', 'y']) and
+            all(k in left_ankle for k in ['x', 'y']) and all(k in right_ankle for k in ['x', 'y'])):
             
+            # Calculate midpoints
             shoulder_mid_x = (left_shoulder['x'] + right_shoulder['x']) / 2
             shoulder_mid_y = (left_shoulder['y'] + right_shoulder['y']) / 2
             hip_mid_x = (left_hip['x'] + right_hip['x']) / 2
             hip_mid_y = (left_hip['y'] + right_hip['y']) / 2
-
-            # Calculate angle between shoulders and hips to check for body alignment
-            alignment_angle = math.atan2(hip_mid_y - shoulder_mid_y, hip_mid_x - shoulder_mid_x) * 180 / math.pi
-            alignment_angle = abs(alignment_angle)
-
-            # Normalize to 0-90 degree range (0 = perfect horizontal alignment)
-            if alignment_angle > 90:
-                alignment_angle = 180 - alignment_angle
-
-            body_alignment = alignment_angle
-            # Position at midpoint between shoulders and hips
-            align_x = (shoulder_mid_x + hip_mid_x) / 2
-            align_y = (shoulder_mid_y + hip_mid_y) / 2
+            ankle_mid_x = (left_ankle['x'] + right_ankle['x']) / 2
+            ankle_mid_y = (left_ankle['y'] + right_ankle['y']) / 2
+            
+            # Calculate alignment angles
+            shoulder_hip_angle = calculate_angle(
+                {'x': shoulder_mid_x, 'y': shoulder_mid_y - 0.1},  # point above shoulder
+                {'x': shoulder_mid_x, 'y': shoulder_mid_y},  # shoulder
+                {'x': hip_mid_x, 'y': hip_mid_y}  # hip
+            )
+            
+            hip_ankle_angle = calculate_angle(
+                {'x': shoulder_mid_x, 'y': hip_mid_y},  # hip
+                {'x': hip_mid_x, 'y': hip_mid_y},  # hip
+                {'x': ankle_mid_x, 'y': ankle_mid_y}  # ankle
+            )
+            
+            # Calculate a 0-100 alignment score (100 = perfect alignment)
+            # In a perfect push-up, both these angles should be close to 180 degrees
+            alignment_score_1 = max(0, min(100, (shoulder_hip_angle / 180) * 100))
+            alignment_score_2 = max(0, min(100, (hip_ankle_angle / 180) * 100))
+            body_alignment_score = (alignment_score_1 + alignment_score_2) / 2
+            
+            # Store for visualization
             angles['Align'] = {
-                'value': body_alignment,
+                'value': body_alignment_score,
                 'position': {
-                    'x': align_x,
-                    'y': align_y
+                    'x': hip_mid_x,
+                    'y': hip_mid_y
                 }
             }
+            
+            # Special debug angle for troubleshooting
+            angles['S-H-Angle'] = {
+                'value': shoulder_hip_angle,
+                'position': {
+                    'x': (shoulder_mid_x + hip_mid_x) / 2,
+                    'y': (shoulder_mid_y + hip_mid_y) / 2 - 0.05
+                }
+            }
+            
+            angles['H-A-Angle'] = {
+                'value': hip_ankle_angle,
+                'position': {
+                    'x': (hip_mid_x + ankle_mid_x) / 2,
+                    'y': (hip_mid_y + ankle_mid_y) / 2 - 0.05
+                }
+            }
+        
+        # Calculate relative shoulder height compared to reference
+        rel_shoulder_height = None
+        if 'reference_height' in state:
+            if all(k in left_shoulder for k in ['x', 'y']) and all(k in right_shoulder for k in ['x', 'y']):
+                current_shoulder_height = (left_shoulder['y'] + right_shoulder['y']) / 2
+                rel_shoulder_height = current_shoulder_height - state['reference_height']
+                
+                # A positive value means shoulders are lower than the reference position
+                shoulder_height_pct = rel_shoulder_height * 100
+                
+                mid_x = (left_shoulder['x'] + right_shoulder['x']) / 2
+                angles['ShoulderDrop'] = {
+                    'value': shoulder_height_pct,
+                    'position': {
+                        'x': mid_x, 
+                        'y': current_shoulder_height
+                    }
+                }
+                
+        # Check if we're in plank position (prerequisite for push-up)
+        is_plank_position = False
+        if body_alignment_score > 70:  # Requiring at least 70% alignment score
+            # Also check if wrists are positioned correctly relative to shoulders
+            if all(k in left_wrist for k in ['x', 'y']) and all(k in right_wrist for k in ['x', 'y']):
+                wrist_mid_y = (left_wrist['y'] + right_wrist['y']) / 2
+                shoulder_mid_y = (left_shoulder['y'] + right_shoulder['y']) / 2
+                
+                # In a proper plank/push-up position, wrists should be at similar height as shoulders
+                # or slightly below/above depending on the camera angle
+                wrist_shoulder_y_diff = abs(wrist_mid_y - shoulder_mid_y)
+                
+                # Typical difference is less than 20% of the screen height in push-up position
+                if wrist_shoulder_y_diff < 0.2:
+                    is_plank_position = True
+                    
+                # Store for debugging
+                angles['W-S-Diff'] = {
+                    'value': wrist_shoulder_y_diff * 100,
+                    'position': {
+                        'x': (left_wrist['x'] + right_wrist['x']) / 2,
+                        'y': (wrist_mid_y + shoulder_mid_y) / 2
+                    }
+                }
 
-        # Process pushup detection using elbow angles, body height, and alignment
+        # Process pushup detection using multiple factors
         feedback = ""
-        if avg_elbow_angle is not None and body_height is not None:
-            # Up position detection (straight arms, higher body position)
-            if avg_elbow_angle > 160 and body_height < 0.7:
-                state['stage'] = "up"
-                state['holdStart'] = current_time
-                feedback = "Up position - good!"
-
-            # Down position detection (bent arms, lower body position)
-            if avg_elbow_angle < 90 and state['stage'] == "up":
-                if current_time - state['holdStart'] > hold_threshold and current_time - state['lastRepTime'] > rep_cooldown:
-                    state['stage'] = "down"
-                    state['repCounter'] += 1
-                    state['lastRepTime'] = current_time
-                    feedback = "Rep complete! Good pushup."
+        
+        # Only process pushups if we're in a plank-like position
+        if is_plank_position and avg_elbow_angle is not None:
+            # Up position detection (straight arms)
+            if avg_elbow_angle > 150:
+                if state['stage'] != "up":
+                    state['stage'] = "up"
+                    state['holdStart'] = current_time
+                    feedback = "Up position - good plank!"
+            
+            # Down position detection (bent arms)
+            if avg_elbow_angle < 110 and state['stage'] == "up":
+                # Require a minimum time in the down position to count the rep
+                if current_time - state['holdStart'] > hold_threshold:
+                    if current_time - state['lastRepTime'] > rep_cooldown:
+                        state['stage'] = "down"
+                        state['repCounter'] += 1
+                        state['lastRepTime'] = current_time
+                        feedback = "Rep complete! Good push-up depth."
+                    else:
+                        feedback = "Down position - good form!"
                 else:
                     feedback = "Down position - hold briefly"
-
-            # Check and provide form feedback based on body alignment
-            if body_alignment is not None and body_alignment > 15:
-                feedback = "Keep your body straight!"
+        else:
+            # If not in plank position but arms are being used
+            if avg_elbow_angle is not None:
+                if body_alignment_score < 70:
+                    feedback = "Keep your body straight for proper push-ups"
+                else:
+                    feedback = "Get into push-up position with hands under shoulders"
+            else:
+                feedback = "Move to ensure arms are visible"
+        
+        # Debug info
+        print(f"Stage: {state['stage']}, Elbow: {avg_elbow_angle}, Alignment: {body_alignment_score}, Plank: {is_plank_position}")
 
         return {
             'repCounter': state['repCounter'],
