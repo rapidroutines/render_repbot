@@ -239,7 +239,7 @@ def process_bicep_curl(landmarks, state, current_time, rep_cooldown, hold_thresh
 
 
 def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for squat exercise with improved detection accuracy"""
+    """Process landmarks for squat exercise using similar logic to the JavaScript implementation"""
     try:
         # Get landmarks for both legs
         left_hip = landmarks[23]
@@ -248,59 +248,14 @@ def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
         right_hip = landmarks[24]
         right_knee = landmarks[26]
         right_ankle = landmarks[28]
-        
-        # Get additional landmarks for better squat detection
-        left_shoulder = landmarks[11]
-        right_shoulder = landmarks[12]
 
         # Variables to store angles and status
         left_knee_angle = None
         right_knee_angle = None
         avg_knee_angle = None
-        hip_shoulder_distance = None
-        hip_ankle_distance = None
+        hip_height = None
         angles = {}
-        
-        # Get initial hip height on first detection if not already set
-        if 'initial_hip_height' not in state:
-            if all(k in left_hip for k in ['x', 'y']) and all(k in right_hip for k in ['x', 'y']):
-                state['initial_hip_height'] = (left_hip['y'] + right_hip['y']) / 2
-                print(f"Initial hip height set to: {state['initial_hip_height']}")
-        
-        # Calculate relative hip height to initial position (for squatting depth)
-        relative_hip_height = None
-        if 'initial_hip_height' in state:
-            if all(k in left_hip for k in ['x', 'y']) and all(k in right_hip for k in ['x', 'y']):
-                current_hip_height = (left_hip['y'] + right_hip['y']) / 2
-                relative_hip_height = (current_hip_height - state['initial_hip_height']) / state['initial_hip_height']
-                # Store as a percentage increase (positive value means hips are lower than starting position)
-                hip_height_pct = relative_hip_height * 100
-                
-                mid_x = (left_hip['x'] + right_hip['x']) / 2
-                angles['HipDrop'] = {
-                    'value': hip_height_pct,
-                    'position': {
-                        'x': mid_x,
-                        'y': current_hip_height
-                    }
-                }
-
-        # Calculate distance between shoulders and hips (for upper body angle)
-        if all(k in left_shoulder for k in ['x', 'y']) and all(k in right_shoulder for k in ['x', 'y']) and \
-           all(k in left_hip for k in ['x', 'y']) and all(k in right_hip for k in ['x', 'y']):
-            shoulder_mid_y = (left_shoulder['y'] + right_shoulder['y']) / 2
-            hip_mid_y = (left_hip['y'] + right_hip['y']) / 2
-            hip_shoulder_distance = abs(hip_mid_y - shoulder_mid_y)
-            
-            # Store for debugging
-            shoulder_mid_x = (left_shoulder['x'] + right_shoulder['x']) / 2
-            angles['TorsoLen'] = {
-                'value': hip_shoulder_distance * 100,
-                'position': {
-                    'x': shoulder_mid_x,
-                    'y': (shoulder_mid_y + hip_mid_y) / 2
-                }
-            }
+        feedback = ""
 
         # Calculate left knee angle if landmarks are visible
         if all(k in left_hip for k in ['x', 'y']) and all(k in left_knee for k in ['x', 'y']) and all(k in left_ankle for k in ['x', 'y']):
@@ -308,7 +263,7 @@ def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
             angles['L'] = {
                 'value': left_knee_angle,
                 'position': {
-                    'x': left_knee['x'],
+                    'x': left_knee['x'] + 0.05,  # Offset a bit to the right like in JS
                     'y': left_knee['y']
                 }
             }
@@ -319,7 +274,7 @@ def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
             angles['R'] = {
                 'value': right_knee_angle,
                 'position': {
-                    'x': right_knee['x'],
+                    'x': right_knee['x'] + 0.05,  # Offset a bit to the right like in JS
                     'y': right_knee['y']
                 }
             }
@@ -334,7 +289,7 @@ def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
                 'value': avg_knee_angle,
                 'position': {
                     'x': mid_x,
-                    'y': mid_y
+                    'y': mid_y - 0.05  # Offset upward like in JS
                 }
             }
         elif left_knee_angle is not None:
@@ -342,85 +297,42 @@ def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
         elif right_knee_angle is not None:
             avg_knee_angle = right_knee_angle
 
-        # Calculate hip to ankle distance (for squat width check)
-        if all(k in left_hip for k in ['x', 'y']) and all(k in left_ankle for k in ['x', 'y']) and \
-           all(k in right_hip for k in ['x', 'y']) and all(k in right_ankle for k in ['x', 'y']):
-            hip_mid_x = (left_hip['x'] + right_hip['x']) / 2
-            ankle_mid_x = (left_ankle['x'] + right_ankle['x']) / 2
-            hip_ankle_distance = abs(hip_mid_x - ankle_mid_x)
-            
-            # Store for debugging
-            ankle_mid_y = (left_ankle['y'] + right_ankle['y']) / 2
-            angles['StanceWidth'] = {
-                'value': hip_ankle_distance * 100,
+        # Calculate hip height (normalized to image height)
+        if all(k in left_hip for k in ['x', 'y']) and all(k in right_hip for k in ['x', 'y']):
+            hip_height = (left_hip['y'] + right_hip['y']) / 2
+            mid_x = (left_hip['x'] + right_hip['x']) / 2
+            angles['Hip'] = {
+                'value': hip_height * 100,  # Convert to percentage
                 'position': {
-                    'x': (hip_mid_x + ankle_mid_x) / 2,
-                    'y': (ankle_mid_y + ankle_mid_y) / 2
+                    'x': mid_x,
+                    'y': hip_height - 0.05  # Offset upward like in JS
                 }
             }
 
-        # Process squat detection using knee angles and relative hip height
-        feedback = ""
-        
-        # IMPROVED DETECTION LOGIC
-        # We now use both knee angle and relative hip position for more accurate detection
-        # This helps with different camera angles and body proportions
-        
-        # Standing position detection (straight legs)
-        if avg_knee_angle is not None and avg_knee_angle > 150:
-            if state['stage'] != "up":
+        # Process squat detection using both knee angles and hip height
+        if avg_knee_angle is not None and hip_height is not None:
+            # Standing position detection (straight legs and higher hip position)
+            if avg_knee_angle > 160 and hip_height < 0.6:
                 state['stage'] = "up"
                 state['holdStart'] = current_time
-                feedback = "Standing position - ready to squat"
-        
-        # Squat position detection (bent knees)
-        # We use a more lenient knee angle threshold (130 degrees) and check relative hip drop
-        if avg_knee_angle is not None and avg_knee_angle < 130:
-            # If we have relative hip height measurement, use it as an additional check
-            squat_depth_confirmed = False
+                feedback = "Standing position"
             
-            if relative_hip_height is not None:
-                # A positive value means hips are lower than starting position
-                if relative_hip_height > 0.1:  # Hip dropped at least 10% from starting position
-                    squat_depth_confirmed = True
-                    feedback = "Good squat depth!"
-            else:
-                # Fall back to just knee angle if we don't have relative hip height
-                squat_depth_confirmed = True
-            
-            if squat_depth_confirmed and state['stage'] == "up":
-                if current_time - state['holdStart'] > hold_threshold:
-                    if current_time - state['lastRepTime'] > rep_cooldown:
-                        state['stage'] = "down"
-                        state['repCounter'] += 1
-                        state['lastRepTime'] = current_time
-                        feedback = "Rep complete! Great squat."
+            # Squat position detection (bent knees and lower hip position)
+            if avg_knee_angle < 120 and hip_height > 0.65 and state['stage'] == "up":
+                if current_time - state['holdStart'] > hold_threshold and current_time - state['lastRepTime'] > rep_cooldown:
+                    state['stage'] = "down"
+                    state['repCounter'] += 1
+                    state['lastRepTime'] = current_time
+                    feedback = "Rep complete!"
                 else:
-                    feedback = "Hold squat position"
-            elif squat_depth_confirmed and state['stage'] == "down":
-                feedback = "Return to standing position"
-        
-        # Form feedback for better squats
-        if avg_knee_angle is not None:
-            if state['stage'] == "up" and 130 < avg_knee_angle < 150:
-                feedback = "Begin squat - bend knees more"
-            elif state['stage'] == "down" and avg_knee_angle > 140:
-                feedback = "Return to standing position fully"
-        
-        # More detailed form feedback if we have all the measurements
-        if hip_ankle_distance is not None and hip_ankle_distance < 0.05:
-            feedback = "Wider stance recommended for stability"
-        
-        # Debug information
-        if 'initial_hip_height' in state:
-            print(f"Current state: {state['stage']}, Knee angle: {avg_knee_angle}, " +
-                  f"Hip relative: {relative_hip_height if relative_hip_height is not None else 'N/A'}")
-        
+                    feedback = "Squatting"
+
         return {
             'repCounter': state['repCounter'],
             'stage': state['stage'],
             'feedback': feedback,
-            'angles': angles
+            'angles': angles,
+            'status': "Standing" if state['stage'] == "up" else "Squatting"  # Include status for UI display
         }
         
     except Exception as e:
@@ -428,7 +340,8 @@ def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
         return {
             'repCounter': state['repCounter'],
             'stage': state['stage'],
-            'feedback': f"Error: {str(e)}"
+            'feedback': f"Error: {str(e)}",
+            'angles': {}
         }
 
 def process_pushup(landmarks, state, current_time, rep_cooldown, hold_threshold):
