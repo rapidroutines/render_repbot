@@ -79,8 +79,6 @@ def process_landmarks():
             result = process_shoulder_press(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
         elif exercise_type == 'handstand':
             result = process_handstand(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
-        elif exercise_type == 'pullUp':
-            result = process_pull_up(landmarks, client_state, current_time, rep_cooldown)
         elif exercise_type == 'situp':
             result = process_situp(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
         elif exercise_type == 'jumpingJacks':
@@ -495,7 +493,7 @@ def process_pushup(landmarks, state, current_time, rep_cooldown, hold_threshold)
 
 
 def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for shoulder press exercise"""
+    """Process landmarks for shoulder press exercise using similar logic to the JavaScript implementation"""
     try:
         # Get landmarks for both arms
         left_shoulder = landmarks[11]
@@ -511,60 +509,73 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
         left_wrist_above_shoulder = False
         right_wrist_above_shoulder = False
         angles = {}
+        positions = {}
+        feedback = ""
+        warnings = []
 
         # Calculate left arm position and angle
         if all(k in left_shoulder for k in ['x', 'y']) and all(k in left_elbow for k in ['x', 'y']) and all(k in left_wrist for k in ['x', 'y']):
             left_elbow_angle = calculate_angle(left_wrist, left_elbow, left_shoulder)
+            
+            # Check if left wrist is above shoulder
+            left_wrist_above_shoulder = left_wrist['y'] < left_shoulder['y']
+            
+            # Store angle with position data
             angles['L'] = {
                 'value': left_elbow_angle,
                 'position': {
-                    'x': left_elbow['x'],
+                    'x': left_elbow['x'] + 0.05,  # Offset a bit to the right like in JS
                     'y': left_elbow['y']
                 }
             }
-
-            # Check if left wrist is above shoulder
-            left_wrist_above_shoulder = left_wrist['y'] < left_shoulder['y']
-            angles['LWristPos'] = {
-                'value': 1 if left_wrist_above_shoulder else 0,
+            
+            # Store wrist position indicator
+            positions['LWrist'] = {
+                'value': "↑" if left_wrist_above_shoulder else "↓",
                 'position': {
                     'x': left_wrist['x'],
-                    'y': left_wrist['y']
-                }
+                    'y': left_wrist['y'] - 0.02  # Offset upward like in JS
+                },
+                'color': "#00FF00" if left_wrist_above_shoulder else "#FF9900"
             }
 
         # Calculate right arm position and angle
         if all(k in right_shoulder for k in ['x', 'y']) and all(k in right_elbow for k in ['x', 'y']) and all(k in right_wrist for k in ['x', 'y']):
             right_elbow_angle = calculate_angle(right_wrist, right_elbow, right_shoulder)
+            
+            # Check if right wrist is above shoulder
+            right_wrist_above_shoulder = right_wrist['y'] < right_shoulder['y']
+            
+            # Store angle with position data
             angles['R'] = {
                 'value': right_elbow_angle,
                 'position': {
-                    'x': right_elbow['x'],
+                    'x': right_elbow['x'] + 0.05,  # Offset a bit to the right like in JS
                     'y': right_elbow['y']
                 }
             }
-
-            # Check if right wrist is above shoulder
-            right_wrist_above_shoulder = right_wrist['y'] < right_shoulder['y']
-            angles['RWristPos'] = {
-                'value': 1 if right_wrist_above_shoulder else 0,
+            
+            # Store wrist position indicator
+            positions['RWrist'] = {
+                'value': "↑" if right_wrist_above_shoulder else "↓",
                 'position': {
                     'x': right_wrist['x'],
-                    'y': right_wrist['y']
-                }
+                    'y': right_wrist['y'] - 0.02  # Offset upward like in JS
+                },
+                'color': "#00FF00" if right_wrist_above_shoulder else "#FF9900"
             }
 
         # Calculate average elbow angle if both are available
         avg_elbow_angle = None
         if left_elbow_angle is not None and right_elbow_angle is not None:
             avg_elbow_angle = (left_elbow_angle + right_elbow_angle) / 2
-            mid_x = (left_elbow['x'] + right_elbow['x']) / 2
-            mid_y = (left_elbow['y'] + right_elbow['y']) / 2
+            
+            # Store average angle with position between elbows
             angles['Avg'] = {
                 'value': avg_elbow_angle,
                 'position': {
-                    'x': mid_x,
-                    'y': mid_y
+                    'x': (left_elbow['x'] + right_elbow['x']) / 2,
+                    'y': (left_elbow['y'] + right_elbow['y']) / 2 - 0.05  # Offset upward like in JS
                 }
             }
         elif left_elbow_angle is not None:
@@ -578,12 +589,13 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
         one_wrist_above_shoulder = left_wrist_above_shoulder or right_wrist_above_shoulder
 
         # Process shoulder press detection
-        feedback = ""
+        status = ""
         if avg_elbow_angle is not None:
             # Starting (down) position - arms bent, wrists below shoulders
             if avg_elbow_angle < 100 and both_wrists_below_shoulder:
                 state['stage'] = "down"
                 state['holdStart'] = current_time
+                status = "Ready Position"
                 feedback = "Ready position - good start"
 
             # Up position - arms extended, wrists above shoulders
@@ -592,22 +604,29 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
                     state['stage'] = "up"
                     state['repCounter'] += 1
                     state['lastRepTime'] = current_time
+                    status = "Rep Complete!"
                     feedback = "Rep complete! Good press."
                 elif state['stage'] == "up":
+                    status = "Press Complete"
                     feedback = "Press complete - hold position"
 
             # Form feedback
             if state['stage'] == "down" and avg_elbow_angle < 65:
+                warnings.append("Start higher!")
                 feedback = "Start with arms higher"
 
             if one_wrist_above_shoulder and not both_wrists_above_shoulder and state['stage'] == "up":
+                warnings.append("Press both arms evenly!")
                 feedback = "Press both arms evenly"
 
         return {
             'repCounter': state['repCounter'],
             'stage': state['stage'],
             'feedback': feedback,
-            'angles': angles
+            'angles': angles,
+            'positions': positions,  # For special position indicators like arrows
+            'status': status,
+            'warnings': warnings
         }
         
     except Exception as e:
@@ -615,12 +634,16 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
         return {
             'repCounter': state['repCounter'],
             'stage': state['stage'],
-            'feedback': f"Error: {str(e)}"
+            'feedback': f"Error: {str(e)}",
+            'angles': {},
+            'positions': {},
+            'status': "",
+            'warnings': []
         }
 
 
 def process_handstand(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for handstand exercise"""
+    """Process landmarks for handstand exercise using similar logic to the JavaScript implementation"""
     try:
         # Get key landmarks
         left_wrist = landmarks[15]
@@ -643,7 +666,9 @@ def process_handstand(landmarks, state, current_time, rep_cooldown, hold_thresho
             return {
                 'repCounter': state['repCounter'],
                 'stage': state['stage'],
-                'feedback': "Move to ensure full body is visible"
+                'feedback': "Move to ensure full body is visible",
+                'angles': {},
+                'form_feedback': {}
             }
 
         # Calculate angle between shoulder, hip, and knee (should be straight in a proper handstand)
@@ -688,7 +713,7 @@ def process_handstand(landmarks, state, current_time, rep_cooldown, hold_thresho
                        is_left_leg_straight and is_right_leg_straight and 
                        is_hand_placement_good)
 
-        # Store angles for UI
+        # Store angles for UI display
         angles = {
             'LBody': {
                 'value': left_body_angle,
@@ -725,6 +750,17 @@ def process_handstand(landmarks, state, current_time, rep_cooldown, hold_thresho
                     'y': (left_wrist['y'] + right_wrist['y']) / 2
                 }
             }
+        }
+
+        # Store form feedback data
+        form_feedback = {
+            'isInverted': is_inverted,
+            'leftBodyAngle': left_body_angle,
+            'rightBodyAngle': right_body_angle,
+            'leftLegAngle': left_leg_angle,
+            'rightLegAngle': right_leg_angle,
+            'wristDistanceRatio': wrist_distance_ratio,
+            'isGoodForm': is_good_form
         }
 
         # Generate feedback based on form
@@ -765,7 +801,8 @@ def process_handstand(landmarks, state, current_time, rep_cooldown, hold_thresho
             'repCounter': state['repCounter'],
             'stage': state['stage'],
             'feedback': feedback,
-            'angles': angles
+            'angles': angles,
+            'form_feedback': form_feedback
         }
         
     except Exception as e:
@@ -773,131 +810,15 @@ def process_handstand(landmarks, state, current_time, rep_cooldown, hold_thresho
         return {
             'repCounter': state['repCounter'],
             'stage': state['stage'],
-            'feedback': f"Error: {str(e)}"
+            'feedback': f"Error: {str(e)}",
+            'angles': {},
+            'form_feedback': {}
         }
 
-
-def process_pull_up(landmarks, state, current_time, rep_cooldown):
-    """Process landmarks for pull-up exercise"""
-    try:
-        # Get coordinates for both sides
-        left_shoulder = landmarks[11]
-        left_elbow = landmarks[13]
-        left_wrist = landmarks[15]
-        right_shoulder = landmarks[12]
-        right_elbow = landmarks[14]
-        right_wrist = landmarks[16]
-
-        # Check if we have valid landmarks for at least one side
-        left_valid = (left_shoulder and left_elbow and left_wrist and
-                     all(k in left_shoulder for k in ['x', 'y']) and
-                     all(k in left_elbow for k in ['x', 'y']) and
-                     all(k in left_wrist for k in ['x', 'y']))
-        
-        right_valid = (right_shoulder and right_elbow and right_wrist and
-                      all(k in right_shoulder for k in ['x', 'y']) and
-                      all(k in right_elbow for k in ['x', 'y']) and
-                      all(k in right_wrist for k in ['x', 'y']))
-
-        if not left_valid and not right_valid:
-            return {
-                'repCounter': state['repCounter'],
-                'stage': state['stage'],
-                'feedback': "Position not clear - adjust camera"
-            }
-
-        # Calculate angles for both sides
-        left_angle = None
-        right_angle = None
-        angles = {}
-
-        if left_valid:
-            left_angle = calculate_angle(
-                {'x': left_shoulder['x'], 'y': left_shoulder['y']},
-                {'x': left_elbow['x'], 'y': left_elbow['y']},
-                {'x': left_wrist['x'], 'y': left_wrist['y']}
-            )
-            angles['L'] = {
-                'value': left_angle,
-                'position': {
-                    'x': left_elbow['x'],
-                    'y': left_elbow['y']
-                }
-            }
-
-        if right_valid:
-            right_angle = calculate_angle(
-                {'x': right_shoulder['x'], 'y': right_shoulder['y']},
-                {'x': right_elbow['x'], 'y': right_elbow['y']},
-                {'x': right_wrist['x'], 'y': right_wrist['y']}
-            )
-            angles['R'] = {
-                'value': right_angle,
-                'position': {
-                    'x': right_elbow['x'],
-                    'y': right_elbow['y']
-                }
-            }
-
-        # Average the angles if both sides are valid, otherwise use the valid one
-        arm_angle = None
-        if left_valid and right_valid:
-            arm_angle = (left_angle + right_angle) / 2
-            mid_x = (left_elbow['x'] + right_elbow['x']) / 2
-            mid_y = (left_elbow['y'] + right_elbow['y']) / 2
-            angles['Avg'] = {
-                'value': arm_angle,
-                'position': {
-                    'x': mid_x,
-                    'y': mid_y
-                }
-            }
-        elif left_valid:
-            arm_angle = left_angle
-        else:
-            arm_angle = right_angle
-
-        # Store the previous stage to detect transitions
-        previous_stage = state['stage']
-
-        # Determine pull-up stage based on arm angle
-        # For pull-ups, when arms are bent (small angle) we're in "up" position
-        if arm_angle < 50:
-            state['stage'] = "up"
-        elif arm_angle > 150:
-            state['stage'] = "down"
-
-        # Generate feedback based on stage
-        feedback = ""
-        if state['stage'] == "up":
-            feedback = "Up position - good!"
-        elif state['stage'] == "down":
-            feedback = "Down position - pull up!"
-
-        # Count rep when transitioning from "up" to "down" with cooldown
-        if previous_stage == "up" and state['stage'] == "down" and current_time - state['lastRepTime'] > rep_cooldown:
-            state['repCounter'] += 1
-            state['lastRepTime'] = current_time
-            feedback = "Rep complete! Good pull-up."
-
-        return {
-            'repCounter': state['repCounter'],
-            'stage': state['stage'],
-            'feedback': feedback,
-            'angles': angles
-        }
-        
-    except Exception as e:
-        print(f"Error in pull-up detection: {str(e)}")
-        return {
-            'repCounter': state['repCounter'],
-            'stage': state['stage'],
-            'feedback': f"Error: {str(e)}"
-        }
 
 
 def process_situp(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for sit-up exercise"""
+    """Process landmarks for sit-up exercise using similar logic to the JavaScript implementation"""
     try:
         # Get landmarks for both sides
         left_shoulder = landmarks[11]
@@ -912,10 +833,10 @@ def process_situp(landmarks, state, current_time, rep_cooldown, hold_threshold):
         right_angle = 0
         avg_angle = 0
         angles = {}
+        feedback = ""
 
         # Check if we have all required landmarks
-        if (left_shoulder and left_hip and left_knee and right_shoulder and right_hip and right_knee and
-            all(k in left_shoulder for k in ['x', 'y']) and all(k in left_hip for k in ['x', 'y']) and 
+        if (all(k in left_shoulder for k in ['x', 'y']) and all(k in left_hip for k in ['x', 'y']) and 
             all(k in left_knee for k in ['x', 'y']) and all(k in right_shoulder for k in ['x', 'y']) and 
             all(k in right_hip for k in ['x', 'y']) and all(k in right_knee for k in ['x', 'y'])):
 
@@ -925,10 +846,12 @@ def process_situp(landmarks, state, current_time, rep_cooldown, hold_threshold):
                 {'x': left_hip['x'], 'y': left_hip['y']},
                 {'x': left_knee['x'], 'y': left_knee['y']}
             )
+            
+            # Store angle with position data
             angles['L'] = {
                 'value': left_angle,
                 'position': {
-                    'x': left_hip['x'],
+                    'x': left_hip['x'] + 0.05,  # Offset a bit to the right like in JS
                     'y': left_hip['y']
                 }
             }
@@ -939,34 +862,35 @@ def process_situp(landmarks, state, current_time, rep_cooldown, hold_threshold):
                 {'x': right_hip['x'], 'y': right_hip['y']},
                 {'x': right_knee['x'], 'y': right_knee['y']}
             )
+            
+            # Store angle with position data
             angles['R'] = {
                 'value': right_angle,
                 'position': {
-                    'x': right_hip['x'],
-                    'y': right_hip['y']
+                    'x': right_hip['x'] + 0.05,  # Offset a bit to the right like in JS
+                    'y': right_hip['y'] - 0.05  # Offset upward like in JS
                 }
             }
 
             # Calculate average angle (for more stability)
             avg_angle = (left_angle + right_angle) / 2
-            mid_x = (left_hip['x'] + right_hip['x']) / 2
-            mid_y = (left_hip['y'] + right_hip['y']) / 2
+            
+            # Store average angle
             angles['Avg'] = {
                 'value': avg_angle,
                 'position': {
-                    'x': mid_x,
-                    'y': mid_y
+                    'x': left_hip['x'] + 0.05,  # Offset a bit to the right like in JS
+                    'y': left_hip['y'] - 0.1  # Offset upward more like in JS
                 }
             }
 
             # Rep counting logic using average angle for more stability
-            feedback = ""
             if avg_angle > 160:
                 # Lying flat
                 state['stage'] = "down"
                 state['holdStart'] = current_time
                 feedback = "Down position - prepare to sit up"
-
+            
             if avg_angle < 80 and state['stage'] == "down":
                 # Sitting up
                 if current_time - state['holdStart'] > hold_threshold and current_time - state['lastRepTime'] > rep_cooldown:
@@ -981,14 +905,16 @@ def process_situp(landmarks, state, current_time, rep_cooldown, hold_threshold):
                 'repCounter': state['repCounter'],
                 'stage': state['stage'],
                 'feedback': feedback,
-                'angles': angles
+                'angles': angles,
+                'status': state['stage']  # Include status for UI display
             }
         else:
             return {
                 'repCounter': state['repCounter'],
                 'stage': state['stage'],
                 'feedback': "Position not clear - adjust camera",
-                'angles': {}
+                'angles': {},
+                'status': ""
             }
         
     except Exception as e:
@@ -996,12 +922,14 @@ def process_situp(landmarks, state, current_time, rep_cooldown, hold_threshold):
         return {
             'repCounter': state['repCounter'],
             'stage': state['stage'],
-            'feedback': f"Error: {str(e)}"
+            'feedback': f"Error: {str(e)}",
+            'angles': {},
+            'status': ""
         }
 
 
 def process_jumping_jacks(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for jumping jacks exercise"""
+    """Process landmarks for jumping jacks exercise using similar logic to the JavaScript implementation"""
     try:
         # Extract key landmarks
         left_shoulder = landmarks[11]
@@ -1028,7 +956,8 @@ def process_jumping_jacks(landmarks, state, current_time, rep_cooldown, hold_thr
                 'repCounter': state['repCounter'],
                 'stage': state['stage'],
                 'feedback': "Position not clear - adjust camera",
-                'angles': {}
+                'angles': {},
+                'position': ""
             }
 
         # Calculate arm angles (angle between shoulder-elbow-wrist)
@@ -1048,6 +977,9 @@ def process_jumping_jacks(landmarks, state, current_time, rep_cooldown, hold_thr
         right_hip_angle = calculate_angle(right_shoulder, right_hip, right_knee)
 
         # Store angles for display with positions
+        mid_shoulder_x = (left_shoulder['x'] + right_shoulder['x']) / 2
+        mid_shoulder_y = (left_shoulder['y'] + right_shoulder['y']) / 2
+        
         angles = {
             'LArm': {
                 'value': left_arm_angle,
@@ -1104,6 +1036,13 @@ def process_jumping_jacks(landmarks, state, current_time, rep_cooldown, hold_thr
                     'x': right_hip['x'],
                     'y': right_hip['y']
                 }
+            },
+            'Summary': {
+                'value': f"L:{int(left_arm_angle)}° R:{int(right_arm_angle)}°",
+                'position': {
+                    'x': mid_shoulder_x,
+                    'y': mid_shoulder_y - 0.12
+                }
             }
         }
 
@@ -1125,28 +1064,35 @@ def process_jumping_jacks(landmarks, state, current_time, rep_cooldown, hold_thr
         )
 
         feedback = ""
+        position = "TRANSITION"
+        
         if is_closed_position:
             state['stage'] = "closed"
             state['holdStart'] = current_time
             feedback = "Closed position - prepare to jump"
-
+            position = "CLOSED"
+        
         if is_open_position and state['stage'] == "closed":
             if current_time - state['holdStart'] > hold_threshold and current_time - state['lastRepTime'] > rep_cooldown:
                 state['stage'] = "open"
                 state['repCounter'] += 1
                 state['lastRepTime'] = current_time
                 feedback = "Rep complete! Good jumping jack."
+                position = "OPEN"
             else:
                 feedback = "Open position - good form"
+                position = "OPEN"
         
         if not is_open_position and not is_closed_position:
             feedback = "Transition - continue your movement"
+            position = "TRANSITION"
 
         return {
             'repCounter': state['repCounter'],
             'stage': state['stage'],
             'feedback': feedback,
-            'angles': angles
+            'angles': angles,
+            'position': position
         }
         
     except Exception as e:
@@ -1154,12 +1100,14 @@ def process_jumping_jacks(landmarks, state, current_time, rep_cooldown, hold_thr
         return {
             'repCounter': state['repCounter'],
             'stage': state['stage'],
-            'feedback': f"Error: {str(e)}"
+            'feedback': f"Error: {str(e)}",
+            'angles': {},
+            'position': ""
         }
 
 
 def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for lunge exercise"""
+    """Process landmarks for lunge exercise using similar logic to the JavaScript implementation"""
     try:
         # Get landmarks for both sides of the body
         left_hip = landmarks[23]
@@ -1203,7 +1151,7 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
         front_knee = right_knee if left_knee['y'] > right_knee['y'] else left_knee
         back_knee = left_knee if left_knee['y'] > right_knee['y'] else right_knee
         
-        # Store angles for display with positions
+        # Store angles for display
         angles = {
             'LLeg': {
                 'value': left_leg_angle,
@@ -1222,14 +1170,14 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
             'Front': {
                 'value': front_leg_angle,
                 'position': {
-                    'x': front_knee['x'],
+                    'x': front_knee['x'] + 0.05,  # Offset a bit to the right like in JS
                     'y': front_knee['y']
                 }
             },
             'Back': {
                 'value': back_leg_angle,
                 'position': {
-                    'x': back_knee['x'],
+                    'x': back_knee['x'] + 0.05,  # Offset a bit to the right like in JS
                     'y': back_knee['y']
                 }
             },
@@ -1283,7 +1231,8 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
         return {
             'repCounter': state['repCounter'],
             'stage': state['stage'],
-            'feedback': f"Error: {str(e)}"
+            'feedback': f"Error: {str(e)}",
+            'angles': {}
         }
 
 
