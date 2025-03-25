@@ -19,6 +19,15 @@ class ExerciseCounter {
         // Backend URL - replace with your actual Render URL
         this.backendUrl = "https://render-chatbot1-a8hc.onrender.com";
 
+        // Inactivity tracking
+        this.lastActivityTime = Date.now();
+        this.inactivityTimeout = 300000; // 5 minutes (300 seconds) of inactivity before redirect
+        this.inactivityTimer = null;
+        this.lastLandmarks = null;
+        this.noMovementFrames = 0;
+        this.movementThreshold = 0.01; // Threshold for detecting movement
+        this.maxNoMovementFrames = 150; // About 5 seconds at 30fps
+
         // Setup canvas size responsively
         this.resizeCanvas();
         window.addEventListener('resize', this.resizeCanvas.bind(this));
@@ -35,10 +44,17 @@ class ExerciseCounter {
             if (this.feedbackDisplay) {
                 this.feedbackDisplay.innerText = '';
             }
+            this.resetInactivityTimer(); // Reset inactivity timer on exercise change
         });
 
         // Start camera button event listener
         this.startButton.addEventListener('click', this.startCamera.bind(this));
+
+        // Add event listeners for user activity
+        document.addEventListener('mousemove', this.resetInactivityTimer.bind(this));
+        document.addEventListener('keydown', this.resetInactivityTimer.bind(this));
+        document.addEventListener('click', this.resetInactivityTimer.bind(this));
+        document.addEventListener('touchstart', this.resetInactivityTimer.bind(this));
     }
 
     // Generate a random session ID for the user
@@ -117,6 +133,9 @@ class ExerciseCounter {
             await this.camera.start();
             console.log("Camera started successfully");
 
+            // Start inactivity timer
+            this.startInactivityTimer();
+
         } catch (error) {
             console.error('Error starting camera:', error);
             this.showCameraError(error.message);
@@ -158,9 +177,55 @@ class ExerciseCounter {
                 radius: 3
             });
 
+            // Check for movement
+            this.detectMovement(results.poseLandmarks);
+
             // Send landmarks to backend for processing
             this.sendLandmarksToBackend(results.poseLandmarks);
         }
+    }
+
+    detectMovement(landmarks) {
+        // If no previous landmarks, store current ones and return
+        if (!this.lastLandmarks) {
+            this.lastLandmarks = JSON.parse(JSON.stringify(landmarks));
+            return;
+        }
+
+        // Check if there's significant movement between frames
+        let movement = false;
+        
+        // We'll check a subset of key landmarks for performance
+        const keyPoints = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]; // Head, shoulders, arms, hips, legs
+        
+        for (const i of keyPoints) {
+            if (landmarks[i] && this.lastLandmarks[i]) {
+                const dx = landmarks[i].x - this.lastLandmarks[i].x;
+                const dy = landmarks[i].y - this.lastLandmarks[i].y;
+                const distance = Math.sqrt(dx*dx + dy*dy);
+                
+                if (distance > this.movementThreshold) {
+                    movement = true;
+                    break;
+                }
+            }
+        }
+
+        // Update movement counter
+        if (movement) {
+            this.noMovementFrames = 0;
+            this.resetInactivityTimer(); // Reset inactivity timer on movement
+        } else {
+            this.noMovementFrames++;
+            
+            // If no movement for maxNoMovementFrames consecutive frames, consider inactive
+            if (this.noMovementFrames >= this.maxNoMovementFrames) {
+                this.checkInactivity();
+            }
+        }
+
+        // Store current landmarks for next comparison
+        this.lastLandmarks = JSON.parse(JSON.stringify(landmarks));
     }
 
     async sendLandmarksToBackend(landmarks) {
@@ -188,6 +253,12 @@ class ExerciseCounter {
 
             // Process the response
             const result = await response.json();
+            
+            // If exercise is being performed (rep count increases), reset inactivity
+            if (result.repCounter !== undefined && this.repCounter !== result.repCounter) {
+                this.resetInactivityTimer();
+            }
+            
             this.updateUIFromResponse(result);
         } catch (error) {
             console.error('Error sending landmarks to backend:', error);
@@ -248,6 +319,73 @@ class ExerciseCounter {
                 this.ctx.fillText(text, x, y - 7);
             }
         }
+    }
+
+    // Inactivity detection methods
+    startInactivityTimer() {
+        this.resetInactivityTimer();
+        console.log("Inactivity timer started");
+    }
+
+    resetInactivityTimer() {
+        // Clear existing timer
+        if (this.inactivityTimer) {
+            clearTimeout(this.inactivityTimer);
+        }
+        
+        // Update last activity time
+        this.lastActivityTime = Date.now();
+        
+        // Set new timer
+        this.inactivityTimer = setTimeout(() => {
+            this.checkInactivity();
+        }, this.inactivityTimeout);
+    }
+
+    checkInactivity() {
+        const currentTime = Date.now();
+        const inactiveTime = currentTime - this.lastActivityTime;
+        
+        // If inactive for longer than timeout, redirect
+        if (inactiveTime >= this.inactivityTimeout) {
+            console.log("User inactive, redirecting to dashboard...");
+            this.showRedirectNotice();
+        }
+    }
+
+    showRedirectNotice() {
+        // Create a notice that will display before redirecting
+        const noticeElement = document.createElement('div');
+        noticeElement.className = 'redirect-notice';
+        noticeElement.innerHTML = `
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                        background: rgba(0, 0, 0, 0.7); z-index: 100; display: flex; 
+                        flex-direction: column; justify-content: center; align-items: center; color: white;">
+                <h2>No activity detected</h2>
+                <p>Redirecting to dashboard in 5 seconds...</p>
+                <button id="stay-button" style="padding: 10px 20px; margin-top: 20px; 
+                                                background: #1e628c; border: none; color: white; 
+                                                border-radius: 5px; cursor: pointer;">
+                    Stay on this page
+                </button>
+            </div>
+        `;
+        
+        document.body.appendChild(noticeElement);
+        
+        // Add event listener to the stay button
+        document.getElementById('stay-button').addEventListener('click', () => {
+            // Remove the notice and reset the timer
+            if (noticeElement.parentNode) {
+                noticeElement.parentNode.removeChild(noticeElement);
+            }
+            this.resetInactivityTimer();
+        });
+        
+        // Redirect after 5 seconds
+        setTimeout(() => {
+            window.location.href = "https://rapidroutines.org/dashboard/";
+        }, 5000);
     }
 }
 
