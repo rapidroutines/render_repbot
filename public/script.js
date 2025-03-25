@@ -16,17 +16,17 @@ class ExerciseCounter {
         this.sessionId = this.generateSessionId();
         console.log("Session ID created:", this.sessionId);
         
-        // Backend URL - replace with your actual Render URL
+        // Backend URL
         this.backendUrl = "https://render-chatbot1-a8hc.onrender.com";
 
         // Inactivity tracking
         this.lastActivityTime = Date.now();
-        this.inactivityTimeout = 180000; // 3 minutes (180 seconds) of inactivity before redirect
+        this.inactivityTimeout = 180000; // 3 minutes 
         this.inactivityTimer = null;
         this.lastLandmarks = null;
         this.noMovementFrames = 0;
-        this.movementThreshold = 0.01; // Threshold for detecting movement
-        this.maxNoMovementFrames = 150; // About 5 seconds at 30fps
+        this.movementThreshold = 0.05; // Threshold for detecting movement
+        this.maxNoMovementFrames = 150; 
 
         // Setup canvas size responsively
         this.resizeCanvas();
