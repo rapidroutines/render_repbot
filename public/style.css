@@ -18,7 +18,7 @@ body {
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     left: 0 !important;
     right: 0 !important;
-    background-color: white;
+    background-color: black;
 }
   
 body.menu-open .exercise-counter-container,
