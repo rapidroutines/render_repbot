@@ -21,7 +21,7 @@ class ExerciseCounter {
 
         // Inactivity tracking
         this.lastActivityTime = Date.now();
-        this.inactivityTimeout = 60000; // 1 minute (60 seconds) of inactivity before redirect
+        this.inactivityTimeout = 180000; // 3 minutes (180 seconds) of inactivity before redirect
         this.inactivityTimer = null;
         this.lastLandmarks = null;
         this.noMovementFrames = 0;
@@ -362,7 +362,7 @@ class ExerciseCounter {
                         background: rgba(0, 0, 0, 0.7); z-index: 100; display: flex; 
                         flex-direction: column; justify-content: center; align-items: center; color: white;">
                 <h2>No activity detected</h2>
-                <p>Redirecting to dashboard in 5 seconds...</p>
+                <p>Redirecting to dashboard in <span id="countdown">5</span> seconds...</p>
                 <button id="stay-button" style="padding: 10px 20px; margin-top: 20px; 
                                                 background: #1e628c; border: none; color: white; 
                                                 border-radius: 5px; cursor: pointer;">
@@ -382,10 +382,21 @@ class ExerciseCounter {
             this.resetInactivityTimer();
         });
         
-        // Redirect after 5 seconds
-        setTimeout(() => {
-            window.location.href = "https://rapidroutines.org/dashboard/";
-        }, 5000);
+        // Start the countdown
+        let secondsLeft = 5;
+        const countdownElement = document.getElementById('countdown');
+        
+        const countdownInterval = setInterval(() => {
+            secondsLeft--;
+            if (countdownElement) {
+                countdownElement.textContent = secondsLeft;
+            }
+            
+            if (secondsLeft <= 0) {
+                clearInterval(countdownInterval);
+                window.location.href = "https://rapidroutines.org/dashboard/";
+            }
+        }, 1000);
     }
 }
 
