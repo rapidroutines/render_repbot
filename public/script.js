@@ -21,7 +21,7 @@ class ExerciseCounter {
 
         // Inactivity tracking
         this.lastActivityTime = Date.now();
-        this.inactivityTimeout = 300000; // 5 minutes (300 seconds) of inactivity before redirect
+        this.inactivityTimeout = 60000; // 1 minute (60 seconds) of inactivity before redirect
         this.inactivityTimer = null;
         this.lastLandmarks = null;
         this.noMovementFrames = 0;
