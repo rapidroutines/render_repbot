@@ -13,7 +13,7 @@ class ExerciseCounter {
         this.camera = null;
         
         // Generate a unique session ID for this user
-        this.sessionId = this.generateSessionId();
+        this.sessionId = this.generate_session_id();
         console.log("Session ID created:", this.sessionId);
         
         // Backend URL
@@ -29,11 +29,11 @@ class ExerciseCounter {
         this.maxNoMovementFrames = 150; 
 
         // Setup canvas size responsively
-        this.resizeCanvas();
-        window.addEventListener('resize', this.resizeCanvas.bind(this));
+        this.resize_canvas();
+        window.addEventListener('resize', this.resize_canvas.bind(this));
 
         // Initialize MediaPipe Pose
-        this.initializePose();
+        this.initialize_pose();
 
         // Listen for exercise changes
         this.exerciseSelector.addEventListener('change', () => {
@@ -44,25 +44,25 @@ class ExerciseCounter {
             if (this.feedbackDisplay) {
                 this.feedbackDisplay.innerText = '';
             }
-            this.resetInactivityTimer(); // Reset inactivity timer on exercise change
+            this.reset_inactivity_timer(); // Reset inactivity timer on exercise change
         });
 
         // Start camera button event listener
-        this.startButton.addEventListener('click', this.startCamera.bind(this));
+        this.startButton.addEventListener('click', this.start_camera.bind(this));
 
         // Add event listeners for user activity
-        document.addEventListener('mousemove', this.resetInactivityTimer.bind(this));
-        document.addEventListener('keydown', this.resetInactivityTimer.bind(this));
-        document.addEventListener('click', this.resetInactivityTimer.bind(this));
-        document.addEventListener('touchstart', this.resetInactivityTimer.bind(this));
+        document.addEventListener('mousemove', this.reset_inactivity_timer.bind(this));
+        document.addEventListener('keydown', this.reset_inactivity_timer.bind(this));
+        document.addEventListener('click', this.reset_inactivity_timer.bind(this));
+        document.addEventListener('touchstart', this.reset_inactivity_timer.bind(this));
     }
 
     // Generate a random session ID for the user
-    generateSessionId() {
+    generate_session_id() {
         return 'user_' + Math.random().toString(36).substr(2, 9) + '_' + new Date().getTime();
     }
 
-    resizeCanvas() {
+    resize_canvas() {
         const container = document.getElementById('exercise-container');
         const containerWidth = container.clientWidth;
         const containerHeight = container.clientHeight;
@@ -71,7 +71,7 @@ class ExerciseCounter {
         this.canvas.height = containerHeight;
     }
 
-    initializePose() {
+    initialize_pose() {
         console.log('Initializing MediaPipe Pose...');
         this.pose = new Pose({
             locateFile: (file) => {
@@ -86,11 +86,11 @@ class ExerciseCounter {
             minTrackingConfidence: 0.5
         });
 
-        this.pose.onResults(this.onResults.bind(this));
+        this.pose.onResults(this.on_results.bind(this));
         console.log('MediaPipe initialized successfully');
     }
 
-    async startCamera() {
+    async start_camera() {
         try {
             // Hide start button
             this.startButton.style.display = 'none';
@@ -134,16 +134,16 @@ class ExerciseCounter {
             console.log("Camera started successfully");
 
             // Start inactivity timer
-            this.startInactivityTimer();
+            this.start_inactivity_timer();
 
         } catch (error) {
             console.error('Error starting camera:', error);
-            this.showCameraError(error.message);
+            this.show_camera_error(error.message);
             this.startButton.style.display = 'block';
         }
     }
 
-    showCameraError(message) {
+    show_camera_error(message) {
         const errorElement = document.createElement('div');
         errorElement.className = 'camera-error';
         errorElement.innerHTML = `
@@ -160,7 +160,7 @@ class ExerciseCounter {
         }, 5000);
     }
 
-    onResults(results) {
+    on_results(results) {
         // Clear canvas
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
@@ -178,14 +178,14 @@ class ExerciseCounter {
             });
 
             // Check for movement
-            this.detectMovement(results.poseLandmarks);
+            this.detect_movement(results.poseLandmarks);
 
             // Send landmarks to backend for processing
-            this.sendLandmarksToBackend(results.poseLandmarks);
+            this.send_landmarks_to_backend(results.poseLandmarks);
         }
     }
 
-    detectMovement(landmarks) {
+    detect_movement(landmarks) {
         // If no previous landmarks, store current ones and return
         if (!this.lastLandmarks) {
             this.lastLandmarks = JSON.parse(JSON.stringify(landmarks));
@@ -214,13 +214,13 @@ class ExerciseCounter {
         // Update movement counter
         if (movement) {
             this.noMovementFrames = 0;
-            this.resetInactivityTimer(); // Reset inactivity timer on movement
+            this.reset_inactivity_timer(); // Reset inactivity timer on movement
         } else {
             this.noMovementFrames++;
             
             // If no movement for maxNoMovementFrames consecutive frames, consider inactive
             if (this.noMovementFrames >= this.maxNoMovementFrames) {
-                this.checkInactivity();
+                this.check_inactivity();
             }
         }
 
@@ -228,7 +228,7 @@ class ExerciseCounter {
         this.lastLandmarks = JSON.parse(JSON.stringify(landmarks));
     }
 
-    async sendLandmarksToBackend(landmarks) {
+    async send_landmarks_to_backend(landmarks) {
         try {
             // Prepare the data to send
             const data = {
@@ -256,10 +256,10 @@ class ExerciseCounter {
             
             // If exercise is being performed (rep count increases), reset inactivity
             if (result.repCounter !== undefined && this.repCounter !== result.repCounter) {
-                this.resetInactivityTimer();
+                this.reset_inactivity_timer();
             }
             
-            this.updateUIFromResponse(result);
+            this.update_ui_from_response(result);
         } catch (error) {
             console.error('Error sending landmarks to backend:', error);
             // Handle error appropriately - maybe display a message to the user
@@ -269,7 +269,7 @@ class ExerciseCounter {
         }
     }
 
-    updateUIFromResponse(result) {
+    update_ui_from_response(result) {
         // Update rep counter if changed
         if (result.repCounter !== undefined && this.repCounter !== result.repCounter) {
             this.repCounter = result.repCounter;
@@ -288,11 +288,11 @@ class ExerciseCounter {
 
         // Display angles or other visual feedback if provided
         if (result.angles) {
-            this.displayAngles(result.angles);
+            this.display_angles(result.angles);
         }
     }
 
-    displayAngles(angles) {
+    display_angles(angles) {
         // Display angles directly on the body parts
         this.ctx.font = "bold 16px Arial";
         this.ctx.lineWidth = 3;
@@ -322,12 +322,12 @@ class ExerciseCounter {
     }
 
     // Inactivity detection methods
-    startInactivityTimer() {
-        this.resetInactivityTimer();
+    start_inactivity_timer() {
+        this.reset_inactivity_timer();
         console.log("Inactivity timer started");
     }
 
-    resetInactivityTimer() {
+    reset_inactivity_timer() {
         // Clear existing timer
         if (this.inactivityTimer) {
             clearTimeout(this.inactivityTimer);
@@ -338,22 +338,22 @@ class ExerciseCounter {
         
         // Set new timer
         this.inactivityTimer = setTimeout(() => {
-            this.checkInactivity();
+            this.check_inactivity();
         }, this.inactivityTimeout);
     }
 
-    checkInactivity() {
+    check_inactivity() {
         const currentTime = Date.now();
         const inactiveTime = currentTime - this.lastActivityTime;
         
         // If inactive for longer than timeout, redirect
         if (inactiveTime >= this.inactivityTimeout) {
             console.log("User inactive, redirecting to dashboard...");
-            this.showRedirectNotice();
+            this.show_redirect_notice();
         }
     }
 
-    showRedirectNotice() {
+    show_redirect_notice() {
         // Create a notice that will display before redirecting
         const noticeElement = document.createElement('div');
         noticeElement.className = 'redirect-notice';
@@ -379,7 +379,7 @@ class ExerciseCounter {
             if (noticeElement.parentNode) {
                 noticeElement.parentNode.removeChild(noticeElement);
             }
-            this.resetInactivityTimer();
+            this.reset_inactivity_timer();
         });
         
         // Start the countdown
