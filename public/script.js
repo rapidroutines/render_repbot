@@ -144,19 +144,16 @@ class ExerciseCounter {
     }
 
     show_camera_error(message) {
-        const errorElement = document.createElement('div');
-        errorElement.className = 'camera-error';
-        errorElement.innerHTML = `
-            <p>Camera Error: ${message}</p>
-            <p>Please ensure you've granted camera permissions and try again.</p>
-        `;
-        document.getElementById('exercise-container').appendChild(errorElement);
+        // Get the error element and update the message
+        const errorElement = document.getElementById('camera-error');
+        document.getElementById('error-message').textContent = message;
+        
+        // Show the error element
+        errorElement.style.display = 'block';
 
-        // Remove error message after 5 seconds
+        // Hide error message after 5 seconds
         setTimeout(() => {
-            if (errorElement.parentNode) {
-                errorElement.parentNode.removeChild(errorElement);
-            }
+            errorElement.style.display = 'none';
         }, 5000);
     }
 
@@ -354,37 +351,23 @@ class ExerciseCounter {
     }
 
     show_redirect_notice() {
-        // Create a notice that will display before redirecting
-        const noticeElement = document.createElement('div');
-        noticeElement.className = 'redirect-notice';
-        noticeElement.innerHTML = `
-            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-                        background: rgba(0, 0, 0, 0.7); z-index: 100; display: flex; 
-                        flex-direction: column; justify-content: center; align-items: center; color: white;">
-                <h2>No activity detected</h2>
-                <p>Redirecting to dashboard in <span id="countdown">5</span> seconds...</p>
-                <button id="stay-button" style="padding: 10px 20px; margin-top: 20px; 
-                                                background: #1e628c; border: none; color: white; 
-                                                border-radius: 5px; cursor: pointer;">
-                    Stay on this page
-                </button>
-            </div>
-        `;
+        // Get the redirect notice element
+        const noticeElement = document.getElementById('redirect-notice');
         
-        document.body.appendChild(noticeElement);
+        // Show the notice
+        noticeElement.style.display = 'block';
         
         // Add event listener to the stay button
         document.getElementById('stay-button').addEventListener('click', () => {
-            // Remove the notice and reset the timer
-            if (noticeElement.parentNode) {
-                noticeElement.parentNode.removeChild(noticeElement);
-            }
+            // Hide the notice and reset the timer
+            noticeElement.style.display = 'none';
             this.reset_inactivity_timer();
         });
         
         // Start the countdown
         let secondsLeft = 5;
         const countdownElement = document.getElementById('countdown');
+        countdownElement.textContent = secondsLeft;
         
         const countdownInterval = setInterval(() => {
             secondsLeft--;
