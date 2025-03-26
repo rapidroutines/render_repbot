@@ -168,34 +168,4 @@ body:not(.menu-open) .exercise-counter-container {
         font-size: 14px;
         max-width: 150px;
     }
-
-.redirect-notice {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.7);
-    z-index: 100;
-    display: none;
-}
-
-.redirect-notice-content {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    color: white;
-    height: 100%;
-}
-
-#stay-button {
-    padding: 10px 20px;
-    margin-top: 20px;
-    background: #1e628c;
-    border: none;
-    color: white;
-    border-radius: 5px;
-    cursor: pointer;
-}
 }
