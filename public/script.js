@@ -8,26 +8,18 @@ class ExerciseCounter {
         this.startButton = document.getElementById('start-camera');
         this.feedbackDisplay = document.getElementById('feedback-display');
 
-        this.repCounter = 0;
-        this.stage = "down";
-        this.camera = null;
+        // Backend URL
+        this.backendUrl = "https://render-chatbot1-a8hc.onrender.com";
         
         // Generate a unique session ID for this user
         this.sessionId = this.generate_session_id();
         console.log("Session ID created:", this.sessionId);
         
-        // Backend URL
-        this.backendUrl = "https://render-chatbot1-a8hc.onrender.com";
-
         // Inactivity tracking
         this.lastActivityTime = Date.now();
         this.inactivityTimeout = 180000; // 3 minutes 
         this.inactivityTimer = null;
-        this.lastLandmarks = null;
-        this.noMovementFrames = 0;
-        this.movementThreshold = 0.05; // Threshold for detecting movement
-        this.maxNoMovementFrames = 150; 
-
+        
         // Setup canvas size responsively
         this.resize_canvas();
         window.addEventListener('resize', this.resize_canvas.bind(this));
@@ -38,9 +30,8 @@ class ExerciseCounter {
         // Listen for exercise changes
         this.exerciseSelector.addEventListener('change', () => {
             console.log("Exercise changed to:", this.exerciseSelector.value);
-            this.repCounter = 0;
+            // Reset UI elements
             this.repDisplay.innerText = '0';
-            this.stage = "down";
             if (this.feedbackDisplay) {
                 this.feedbackDisplay.innerText = '';
             }
@@ -136,10 +127,38 @@ class ExerciseCounter {
             // Start inactivity timer
             this.start_inactivity_timer();
 
+            // Initialize session with backend
+            this.initialize_session();
+
         } catch (error) {
             console.error('Error starting camera:', error);
             this.show_camera_error(error.message);
             this.startButton.style.display = 'block';
+        }
+    }
+
+    async initialize_session() {
+        try {
+            // Inform backend about the session start and selected exercise
+            const response = await fetch(`${this.backendUrl}/initialize_session`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    sessionId: this.sessionId,
+                    exerciseType: this.exerciseSelector.value
+                }),
+                mode: 'cors'
+            });
+
+            if (!response.ok) {
+                throw new Error(`Server responded with status: ${response.status}`);
+            }
+
+            console.log("Session initialized with backend");
+        } catch (error) {
+            console.error('Error initializing session with backend:', error);
         }
     }
 
@@ -177,55 +196,9 @@ class ExerciseCounter {
                 radius: 3
             });
 
-            // Check for movement
-            this.detect_movement(results.poseLandmarks);
-
             // Send landmarks to backend for processing
             this.send_landmarks_to_backend(results.poseLandmarks);
         }
-    }
-
-    detect_movement(landmarks) {
-        // If no previous landmarks, store current ones and return
-        if (!this.lastLandmarks) {
-            this.lastLandmarks = JSON.parse(JSON.stringify(landmarks));
-            return;
-        }
-
-        // Check if there's significant movement between frames
-        let movement = false;
-        
-        // We'll check a subset of key landmarks for performance
-        const keyPoints = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]; // Head, shoulders, arms, hips, legs
-        
-        for (const i of keyPoints) {
-            if (landmarks[i] && this.lastLandmarks[i]) {
-                const dx = landmarks[i].x - this.lastLandmarks[i].x;
-                const dy = landmarks[i].y - this.lastLandmarks[i].y;
-                const distance = Math.sqrt(dx*dx + dy*dy);
-                
-                if (distance > this.movementThreshold) {
-                    movement = true;
-                    break;
-                }
-            }
-        }
-
-        // Update movement counter
-        if (movement) {
-            this.noMovementFrames = 0;
-            this.reset_inactivity_timer(); // Reset inactivity timer on movement
-        } else {
-            this.noMovementFrames++;
-            
-            // If no movement for maxNoMovementFrames consecutive frames, consider inactive
-            if (this.noMovementFrames >= this.maxNoMovementFrames) {
-                this.check_inactivity();
-            }
-        }
-
-        // Store current landmarks for next comparison
-        this.lastLandmarks = JSON.parse(JSON.stringify(landmarks));
     }
 
     async send_landmarks_to_backend(landmarks) {
@@ -234,7 +207,8 @@ class ExerciseCounter {
             const data = {
                 landmarks: landmarks,
                 exerciseType: this.exerciseSelector.value,
-                sessionId: this.sessionId
+                sessionId: this.sessionId,
+                timestamp: Date.now()  // Add timestamp for inactivity detection on backend
             };
 
             // Send the data to the backend
@@ -254,8 +228,8 @@ class ExerciseCounter {
             // Process the response
             const result = await response.json();
             
-            // If exercise is being performed (rep count increases), reset inactivity
-            if (result.repCounter !== undefined && this.repCounter !== result.repCounter) {
+            // Reset inactivity timer if activity detected by backend
+            if (result.activity_detected) {
                 this.reset_inactivity_timer();
             }
             
@@ -270,15 +244,9 @@ class ExerciseCounter {
     }
 
     update_ui_from_response(result) {
-        // Update rep counter if changed
-        if (result.repCounter !== undefined && this.repCounter !== result.repCounter) {
-            this.repCounter = result.repCounter;
-            this.repDisplay.innerText = this.repCounter;
-        }
-
-        // Update stage if changed
-        if (result.stage !== undefined) {
-            this.stage = result.stage;
+        // Update rep counter if provided
+        if (result.repCounter !== undefined) {
+            this.repDisplay.innerText = result.repCounter;
         }
 
         // Display feedback if available
@@ -289,6 +257,11 @@ class ExerciseCounter {
         // Display angles or other visual feedback if provided
         if (result.angles) {
             this.display_angles(result.angles);
+        }
+
+        // Display warnings or positions if provided
+        if (result.warnings && result.warnings.length > 0) {
+            this.display_warnings(result.warnings);
         }
     }
 
@@ -305,7 +278,13 @@ class ExerciseCounter {
                 const y = data.position.y * this.canvas.height;
                 
                 // Create background for better visibility
-                const text = `${key}: ${Math.round(data.value)}°`;
+                let text;
+                if (typeof data.value === 'number') {
+                    text = `${key}: ${Math.round(data.value)}°`;
+                } else {
+                    text = `${key}: ${data.value}`;
+                }
+                
                 const textWidth = this.ctx.measureText(text).width;
                 
                 // Draw background rectangle
@@ -319,6 +298,39 @@ class ExerciseCounter {
                 this.ctx.fillText(text, x, y - 7);
             }
         }
+    }
+
+    display_warnings(warnings) {
+        const warningContainer = document.getElementById('warning-container') || 
+                                this.create_warning_container();
+        
+        // Clear previous warnings
+        warningContainer.innerHTML = '';
+        
+        // Display each warning
+        warnings.forEach(warning => {
+            const warningElement = document.createElement('div');
+            warningElement.className = 'exercise-warning';
+            warningElement.textContent = warning;
+            warningContainer.appendChild(warningElement);
+        });
+    }
+
+    create_warning_container() {
+        const container = document.createElement('div');
+        container.id = 'warning-container';
+        container.style.cssText = `
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 10;
+        `;
+        document.getElementById('exercise-container').appendChild(container);
+        return container;
     }
 
     // Inactivity detection methods
