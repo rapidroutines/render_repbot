@@ -1,5 +1,6 @@
 class ExerciseCounter {
     constructor() {
+        // Cache DOM elements
         this.video = document.getElementById('input-video');
         this.canvas = document.getElementById('output-canvas');
         this.ctx = this.canvas.getContext('2d');
@@ -7,13 +8,15 @@ class ExerciseCounter {
         this.exerciseSelector = document.getElementById('exercise-type');
         this.startButton = document.getElementById('start-camera');
         this.feedbackDisplay = document.getElementById('feedback-display');
+        this.exerciseContainer = document.getElementById('exercise-container');
 
+        // Initialize state variables
         this.repCounter = 0;
         this.stage = "down";
         this.camera = null;
         
         // Generate a unique session ID for this user
-        this.sessionId = this.generate_session_id();
+        this.sessionId = 'user_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
         console.log("Session ID created:", this.sessionId);
         
         // Backend URL
@@ -26,7 +29,10 @@ class ExerciseCounter {
         this.lastLandmarks = null;
         this.noMovementFrames = 0;
         this.movementThreshold = 0.05; // Threshold for detecting movement
-        this.maxNoMovementFrames = 150; 
+        this.maxNoMovementFrames = 150;
+        
+        // Key points for movement detection (optimization)
+        this.keyPoints = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]; // Head, shoulders, arms, hips, legs
 
         // Setup canvas size responsively
         this.resize_canvas();
@@ -35,37 +41,34 @@ class ExerciseCounter {
         // Initialize MediaPipe Pose
         this.initialize_pose();
 
-        // Listen for exercise changes
-        this.exerciseSelector.addEventListener('change', () => {
-            console.log("Exercise changed to:", this.exerciseSelector.value);
-            this.repCounter = 0;
-            this.repDisplay.innerText = '0';
-            this.stage = "down";
-            if (this.feedbackDisplay) {
-                this.feedbackDisplay.innerText = '';
-            }
-            this.reset_inactivity_timer(); // Reset inactivity timer on exercise change
-        });
-
-        // Start camera button event listener
+        // Event listeners
+        this.exerciseSelector.addEventListener('change', this.handle_exercise_change.bind(this));
         this.startButton.addEventListener('click', this.start_camera.bind(this));
-
-        // Add event listeners for user activity
-        document.addEventListener('mousemove', this.reset_inactivity_timer.bind(this));
-        document.addEventListener('keydown', this.reset_inactivity_timer.bind(this));
-        document.addEventListener('click', this.reset_inactivity_timer.bind(this));
-        document.addEventListener('touchstart', this.reset_inactivity_timer.bind(this));
+        
+        // Bind activity reset events
+        const resetActivity = this.reset_inactivity_timer.bind(this);
+        document.addEventListener('mousemove', resetActivity);
+        document.addEventListener('keydown', resetActivity);
+        document.addEventListener('click', resetActivity);
+        document.addEventListener('touchstart', resetActivity);
     }
 
-    // Generate a random session ID for the user
-    generate_session_id() {
-        return 'user_' + Math.random().toString(36).substr(2, 9) + '_' + new Date().getTime();
+    handle_exercise_change() {
+        console.log("Exercise changed to:", this.exerciseSelector.value);
+        this.repCounter = 0;
+        this.repDisplay.innerText = '0';
+        this.stage = "down";
+        
+        if (this.feedbackDisplay) {
+            this.feedbackDisplay.innerText = '';
+        }
+        
+        this.reset_inactivity_timer();
     }
 
     resize_canvas() {
-        const container = document.getElementById('exercise-container');
-        const containerWidth = container.clientWidth;
-        const containerHeight = container.clientHeight;
+        const containerWidth = this.exerciseContainer.clientWidth;
+        const containerHeight = this.exerciseContainer.clientHeight;
 
         this.canvas.width = containerWidth;
         this.canvas.height = containerHeight;
@@ -74,9 +77,7 @@ class ExerciseCounter {
     initialize_pose() {
         console.log('Initializing MediaPipe Pose...');
         this.pose = new Pose({
-            locateFile: (file) => {
-                return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
-            }
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
         });
 
         this.pose.setOptions({
@@ -114,7 +115,7 @@ class ExerciseCounter {
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             this.video.srcObject = stream;
 
-            // Return a promise that resolves when the video can play
+            // Wait for video to be ready
             await new Promise((resolve) => {
                 this.video.onloadedmetadata = () => {
                     this.video.play().then(resolve);
@@ -123,9 +124,7 @@ class ExerciseCounter {
 
             // Setup the camera with MediaPipe
             this.camera = new Camera(this.video, {
-                onFrame: async () => {
-                    await this.pose.send({image: this.video});
-                },
+                onFrame: async () => await this.pose.send({image: this.video}),
                 width: 1280,
                 height: 720
             });
@@ -150,7 +149,7 @@ class ExerciseCounter {
             <p>Camera Error: ${message}</p>
             <p>Please ensure you've granted camera permissions and try again.</p>
         `;
-        document.getElementById('exercise-container').appendChild(errorElement);
+        this.exerciseContainer.appendChild(errorElement);
 
         // Remove error message after 5 seconds
         setTimeout(() => {
@@ -195,16 +194,15 @@ class ExerciseCounter {
         // Check if there's significant movement between frames
         let movement = false;
         
-        // We'll check a subset of key landmarks for performance
-        const keyPoints = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]; // Head, shoulders, arms, hips, legs
-        
-        for (const i of keyPoints) {
+        // Check key landmarks for movement
+        for (const i of this.keyPoints) {
             if (landmarks[i] && this.lastLandmarks[i]) {
                 const dx = landmarks[i].x - this.lastLandmarks[i].x;
                 const dy = landmarks[i].y - this.lastLandmarks[i].y;
-                const distance = Math.sqrt(dx*dx + dy*dy);
+                // Using square of distance to avoid expensive square root operation
+                const distanceSquared = dx*dx + dy*dy;
                 
-                if (distance > this.movementThreshold) {
+                if (distanceSquared > this.movementThreshold * this.movementThreshold) {
                     movement = true;
                     break;
                 }
@@ -262,7 +260,7 @@ class ExerciseCounter {
             this.update_ui_from_response(result);
         } catch (error) {
             console.error('Error sending landmarks to backend:', error);
-            // Handle error appropriately - maybe display a message to the user
+            // Handle error appropriately
             if (this.feedbackDisplay) {
                 this.feedbackDisplay.innerText = `Connection error: ${error.message}`;
             }
@@ -343,8 +341,7 @@ class ExerciseCounter {
     }
 
     check_inactivity() {
-        const currentTime = Date.now();
-        const inactiveTime = currentTime - this.lastActivityTime;
+        const inactiveTime = Date.now() - this.lastActivityTime;
         
         // If inactive for longer than timeout, redirect
         if (inactiveTime >= this.inactivityTimeout) {
