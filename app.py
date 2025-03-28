@@ -493,7 +493,7 @@ def process_pushup(landmarks, state, current_time, rep_cooldown, hold_threshold)
 
 
 def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for shoulder press exercise using similar logic to the JavaScript implementation"""
+    """Process landmarks for shoulder press exercise with proper rep counting"""
     try:
         # Get landmarks for both arms
         left_shoulder = landmarks[11]
@@ -524,7 +524,7 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
             angles['L'] = {
                 'value': left_elbow_angle,
                 'position': {
-                    'x': left_elbow['x'] + 0.05,  # Offset a bit to the right like in JS
+                    'x': left_elbow['x'] + 0.05,
                     'y': left_elbow['y']
                 }
             }
@@ -534,7 +534,7 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
                 'value': "↑" if left_wrist_above_shoulder else "↓",
                 'position': {
                     'x': left_wrist['x'],
-                    'y': left_wrist['y'] - 0.02  # Offset upward like in JS
+                    'y': left_wrist['y'] - 0.02
                 },
                 'color': "#00FF00" if left_wrist_above_shoulder else "#FF9900"
             }
@@ -550,7 +550,7 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
             angles['R'] = {
                 'value': right_elbow_angle,
                 'position': {
-                    'x': right_elbow['x'] + 0.05,  # Offset a bit to the right like in JS
+                    'x': right_elbow['x'] + 0.05,
                     'y': right_elbow['y']
                 }
             }
@@ -560,7 +560,7 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
                 'value': "↑" if right_wrist_above_shoulder else "↓",
                 'position': {
                     'x': right_wrist['x'],
-                    'y': right_wrist['y'] - 0.02  # Offset upward like in JS
+                    'y': right_wrist['y'] - 0.02
                 },
                 'color': "#00FF00" if right_wrist_above_shoulder else "#FF9900"
             }
@@ -575,7 +575,7 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
                 'value': avg_elbow_angle,
                 'position': {
                     'x': (left_elbow['x'] + right_elbow['x']) / 2,
-                    'y': (left_elbow['y'] + right_elbow['y']) / 2 - 0.05  # Offset upward like in JS
+                    'y': (left_elbow['y'] + right_elbow['y']) / 2 - 0.05
                 }
             }
         elif left_elbow_angle is not None:
@@ -593,10 +593,16 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
         if avg_elbow_angle is not None:
             # Starting (down) position - arms bent, wrists below shoulders
             if avg_elbow_angle < 100 and both_wrists_below_shoulder:
-                state['stage'] = "down"
-                state['holdStart'] = current_time
-                status = "Ready Position"
-                feedback = "Ready position - good start"
+                # Only reset to down if we were previously up
+                # This is key for the press cycle to work properly
+                if state['stage'] == "up":
+                    state['stage'] = "down"
+                    state['holdStart'] = current_time
+                    
+                # If we're already in down stage, just update status
+                if state['stage'] == "down":
+                    status = "Ready Position"
+                    feedback = "Ready position - good start"
 
             # Up position - arms extended, wrists above shoulders
             if avg_elbow_angle > 140 and (both_wrists_above_shoulder or (one_wrist_above_shoulder and avg_elbow_angle > 150)):
@@ -608,7 +614,7 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
                     feedback = "Rep complete! Good press."
                 elif state['stage'] == "up":
                     status = "Press Complete"
-                    feedback = "Press complete - hold position"
+                    feedback = "Press complete - now return to starting position"
 
             # Form feedback
             if state['stage'] == "down" and avg_elbow_angle < 65:
@@ -624,7 +630,7 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
             'stage': state['stage'],
             'feedback': feedback,
             'angles': angles,
-            'positions': positions,  # For special position indicators like arrows
+            'positions': positions,
             'status': status,
             'warnings': warnings
         }
@@ -640,7 +646,6 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
             'status': "",
             'warnings': []
         }
-
 
 def process_handstand(landmarks, state, current_time, rep_cooldown, hold_threshold):
     """Process landmarks for handstand exercise using similar logic to the JavaScript implementation"""
