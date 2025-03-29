@@ -633,16 +633,10 @@ def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_
         right_extension_detected = False
         angles = {}
         feedback = ""
-        
-        # Check for approximate tricep extension position
-        # Less strict criteria for position verification
-        left_proper_position = False
-        right_proper_position = False
 
-        # Calculate and store left arm angle and check position
+        # Calculate and store left arm angle
         if all(k in left_shoulder for k in ['x', 'y']) and all(k in left_elbow for k in ['x', 'y']) and all(k in left_wrist for k in ['x', 'y']):
             left_angle = calculate_angle(left_shoulder, left_elbow, left_wrist)
-            
             # Store angle with position data
             angles['L'] = {
                 'value': left_angle,
@@ -651,40 +645,19 @@ def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_
                     'y': left_elbow['y']
                 }
             }
-            
-            # More lenient position check - just ensure elbow is not below the shoulder
-            # and the arm is somewhat positioned for tricep work
-            if left_elbow['y'] <= left_shoulder['y'] + 0.05:  # Allow elbow to be slightly below shoulder
-                left_proper_position = True
-                angles['LPos'] = {
-                    'value': 1,
-                    'position': {
-                        'x': left_elbow['x'] - 0.05,
-                        'y': left_elbow['y']
-                    }
-                }
-            else:
-                angles['LPos'] = {
-                    'value': 0,
-                    'position': {
-                        'x': left_elbow['x'] - 0.05,
-                        'y': left_elbow['y']
-                    }
-                }
-                
+
             # Detect left arm extension
-            if left_angle < 100:  # Arm is bent (starting position) - more forgiving angle
+            if left_angle < 100:  # Arm is bent (starting position)
                 state['leftArmStage'] = "down"
                 state['leftArmHoldStart'] = current_time
-            if left_angle > 140 and state['leftArmStage'] == "down":  # Arm is extended - more forgiving angle
+            if left_angle > 140 and state['leftArmStage'] == "down":  # Arm is extended
                 if current_time - state['leftArmHoldStart'] > hold_threshold:
                     left_extension_detected = True
                     state['leftArmStage'] = "up"
 
-        # Calculate and store right arm angle and check position
+        # Calculate and store right arm angle
         if all(k in right_shoulder for k in ['x', 'y']) and all(k in right_elbow for k in ['x', 'y']) and all(k in right_wrist for k in ['x', 'y']):
             right_angle = calculate_angle(right_shoulder, right_elbow, right_wrist)
-            
             # Store angle with position data
             angles['R'] = {
                 'value': right_angle,
@@ -693,55 +666,31 @@ def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_
                     'y': right_elbow['y']
                 }
             }
-            
-            # More lenient position check
-            if right_elbow['y'] <= right_shoulder['y'] + 0.05:  # Allow elbow to be slightly below shoulder
-                right_proper_position = True
-                angles['RPos'] = {
-                    'value': 1,
-                    'position': {
-                        'x': right_elbow['x'] + 0.05,
-                        'y': right_elbow['y']
-                    }
-                }
-            else:
-                angles['RPos'] = {
-                    'value': 0,
-                    'position': {
-                        'x': right_elbow['x'] + 0.05,
-                        'y': right_elbow['y']
-                    }
-                }
-                
+
             # Detect right arm extension
-            if right_angle < 100:  # Arm is bent (starting position) - more forgiving angle
+            if right_angle < 100:  # Arm is bent (starting position)
                 state['rightArmStage'] = "down"
                 state['rightArmHoldStart'] = current_time
-            if right_angle > 140 and state['rightArmStage'] == "down":  # Arm is extended - more forgiving angle
+            if right_angle > 140 and state['rightArmStage'] == "down":  # Arm is extended
                 if current_time - state['rightArmHoldStart'] > hold_threshold:
                     right_extension_detected = True
                     state['rightArmStage'] = "up"
 
         # Count rep only if both arms complete an extension and enough time has passed since last rep
-        # But don't be too strict on the "proper position" check for counting
         if (left_extension_detected and right_extension_detected) and current_time - state['lastRepTime'] > rep_cooldown:
             state['repCounter'] += 1
             state['lastRepTime'] = current_time
-            feedback = "Great form! Both arms extended fully."
+            feedback = "Good rep! Both arms extended."
         else:
-            # Less strict feedback
-            if (left_angle is not None and left_angle < 100) and (right_angle is not None and right_angle < 100):
-                feedback = "Good starting position - extend both arms"
-            elif (left_angle is not None and left_angle > 140) and (right_angle is not None and right_angle < 100):
+            # Simple feedback
+            if left_extension_detected and not right_extension_detected:
                 feedback = "Extend your right arm too"
-            elif (left_angle is not None and left_angle < 100) and (right_angle is not None and right_angle > 140):
+            elif not left_extension_detected and right_extension_detected:
                 feedback = "Extend your left arm too"
-            elif left_angle is not None and right_angle is not None:
-                feedback = "Bend both arms to start"
 
         return {
             'repCounter': state['repCounter'],
-            'stage': 'up' if left_extension_detected or right_extension_detected else 'down',
+            'stage': 'up' if (left_extension_detected and right_extension_detected) else 'down',
             'feedback': feedback,
             'angles': angles
         }
@@ -753,7 +702,6 @@ def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_
             'stage': state['stage'],
             'feedback': f"Error: {str(e)}"
         }
-
 
 def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
     """Process landmarks for lunge exercise"""
