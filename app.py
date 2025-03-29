@@ -519,7 +519,6 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
             left_elbow_angle = calculate_angle(left_wrist, left_elbow, left_shoulder)
             
             # Check if left wrist is above shoulder
-            # More lenient: Add a small buffer (0.02) to the comparison
             left_wrist_above_shoulder = left_wrist['y'] < (left_shoulder['y'] + 0.02)
             
             # Store angle with position data
@@ -546,7 +545,6 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
             right_elbow_angle = calculate_angle(right_wrist, right_elbow, right_shoulder)
             
             # Check if right wrist is above shoulder
-            # More lenient: Add a small buffer (0.02) to the comparison
             right_wrist_above_shoulder = right_wrist['y'] < (right_shoulder['y'] + 0.02)
             
             # Store angle with position data
@@ -595,10 +593,8 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
         status = ""
         if avg_elbow_angle is not None:
             # Starting (down) position - arms bent, wrists below shoulders
-            # More lenient: Changed from 100 to 110 degrees
             if avg_elbow_angle < 110 and both_wrists_below_shoulder:
                 # Only reset to down if we were previously up
-                # This is key for the press cycle to work properly
                 if state['stage'] == "up":
                     state['stage'] = "down"
                     state['holdStart'] = current_time
@@ -609,9 +605,9 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
                     feedback = "Ready position - good start"
 
             # Up position - arms extended, wrists above shoulders
-            # More lenient: Changed from 140 to 130 degrees, and 150 to 140 for single arm
             if avg_elbow_angle > 130 and (both_wrists_above_shoulder or (one_wrist_above_shoulder and avg_elbow_angle > 140)):
-                if state['stage'] == "down" and current_time - state['holdStart'] > hold_threshold and current_time - state['lastRepTime'] > rep_cooldown:
+                if state['stage'] == "down":
+                    # Removed the hold threshold and cooldown checks
                     state['stage'] = "up"
                     state['repCounter'] += 1
                     state['lastRepTime'] = current_time
@@ -622,7 +618,6 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
                     feedback = "Press complete - now return to starting position"
 
             # Form feedback
-            # More lenient: Changed from 65 to 60 degrees
             if state['stage'] == "down" and avg_elbow_angle < 60:
                 warnings.append("Start higher!")
                 feedback = "Start with arms higher"
