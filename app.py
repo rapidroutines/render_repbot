@@ -491,7 +491,7 @@ def process_pushup(landmarks, state, current_time, rep_cooldown, hold_threshold)
 
 
 def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for shoulder press exercise with modified range requirements"""
+    """Process landmarks for shoulder press exercise with improved position tracking"""
     try:
         # Get landmarks for both arms
         left_shoulder = landmarks[11]
@@ -508,6 +508,17 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
         right_wrist_above_shoulder = False
         left_elbow_at_shoulder = False
         right_elbow_at_shoulder = False
+        
+        # Store wrist positions for vertical movement tracking
+        left_wrist_y = None
+        right_wrist_y = None
+        
+        # Add position history tracking if not present in state
+        if 'prev_left_wrist_y' not in state:
+            state['prev_left_wrist_y'] = None
+        if 'prev_right_wrist_y' not in state:
+            state['prev_right_wrist_y'] = None
+            
         angles = {}
         feedback = ""
 
@@ -522,11 +533,13 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
                 }
             }
 
+            # Store current wrist position
+            left_wrist_y = left_wrist['y']
+            
             # Check if left wrist is above shoulder
             left_wrist_above_shoulder = left_wrist['y'] < left_shoulder['y']
             
-            # NEW: Check if left elbow is approximately at shoulder height
-            # Allow for a small range to make detection more reliable
+            # Check if left elbow is approximately at shoulder height
             left_elbow_at_shoulder = abs(left_elbow['y'] - left_shoulder['y']) < 0.05
             
             angles['LWristPos'] = {
@@ -548,10 +561,13 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
                 }
             }
 
+            # Store current wrist position
+            right_wrist_y = right_wrist['y']
+            
             # Check if right wrist is above shoulder
             right_wrist_above_shoulder = right_wrist['y'] < right_shoulder['y']
             
-            # NEW: Check if right elbow is approximately at shoulder height
+            # Check if right elbow is approximately at shoulder height
             right_elbow_at_shoulder = abs(right_elbow['y'] - right_shoulder['y']) < 0.05
             
             angles['RWristPos'] = {
@@ -580,61 +596,93 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
         elif right_elbow_angle is not None:
             avg_elbow_angle = right_elbow_angle
 
-        # NEW: Determine arm positions with modified requirements
+        # Determine arm positions 
         both_wrists_above_shoulder = left_wrist_above_shoulder and right_wrist_above_shoulder
         one_wrist_above_shoulder = left_wrist_above_shoulder or right_wrist_above_shoulder
-        
-        # NEW: Check for elbows at shoulder level (modified down position)
         elbows_at_shoulder_level = (left_elbow_at_shoulder or right_elbow_at_shoulder)
-
-        # Process shoulder press detection with improved state machine and modified requirements
+        
+        # NEW: Detect upward movement by comparing current and previous wrist positions
+        moving_upward = False
+        
+        # For left arm movement
+        if left_wrist_y is not None and state['prev_left_wrist_y'] is not None:
+            left_moving_up = left_wrist_y < state['prev_left_wrist_y']
+            angles['LMovingUp'] = {
+                'value': 1 if left_moving_up else 0,
+                'position': {
+                    'x': left_wrist['x'] - 0.1,
+                    'y': left_wrist['y']
+                }
+            }
+        else:
+            left_moving_up = False
+            
+        # For right arm movement
+        if right_wrist_y is not None and state['prev_right_wrist_y'] is not None:
+            right_moving_up = right_wrist_y < state['prev_right_wrist_y']
+            angles['RMovingUp'] = {
+                'value': 1 if right_moving_up else 0,
+                'position': {
+                    'x': right_wrist['x'] + 0.1,
+                    'y': right_wrist['y']
+                }
+            }
+        else:
+            right_moving_up = False
+            
+        # Consider moving upward if either arm is clearly moving up
+        # Use a significant threshold to avoid minor fluctuations
+        if (left_moving_up and left_wrist_y is not None and state['prev_left_wrist_y'] is not None and 
+           (state['prev_left_wrist_y'] - left_wrist_y > 0.01)):
+            moving_upward = True
+        if (right_moving_up and right_wrist_y is not None and state['prev_right_wrist_y'] is not None and 
+           (state['prev_right_wrist_y'] - right_wrist_y > 0.01)):
+            moving_upward = True
+        
+        # Process shoulder press detection with position tracking
         if avg_elbow_angle is not None:
-            # MODIFIED DOWN POSITION: Now we only require elbows to be around shoulder height
-            # and a moderate bend in the arms, not requiring wrists to be below shoulders
+            # DOWN POSITION: Arms bent, elbows near shoulders
             in_down_position = (avg_elbow_angle < 120) and (elbows_at_shoulder_level or not both_wrists_above_shoulder)
             
-            # UP POSITION: Still requires arms extended with wrists above shoulders
+            # UP POSITION: Arms extended, wrists above shoulders
             in_up_position = (avg_elbow_angle > 140 and both_wrists_above_shoulder) or (avg_elbow_angle > 150 and one_wrist_above_shoulder)
             
-            # STATE TRANSITIONS with modified position requirements
+            # STATE TRANSITIONS with movement verification
             if in_down_position:
                 # If we were previously in the up position and now in down, we're ready for next rep
                 if state['stage'] == "up":
-                    # Reset to down position, ready for next rep
                     state['stage'] = "down"
                     feedback = "Ready for next rep"
                 elif state['stage'] == "down":
-                    # Already in down position
                     feedback = "Ready position"
                 
-                # Always reset the hold timer when in down position
                 state['holdStart'] = current_time
                 
             elif in_up_position:
-                # If we were in down position and now reaching up, check for a rep
-                if state['stage'] == "down":
-                    # Only count if enough time has passed since the last rep
+                # NEW: Only count rep if we were in down position AND we detected upward movement
+                if state['stage'] == "down" and moving_upward:
                     if current_time - state['lastRepTime'] > rep_cooldown:
                         state['repCounter'] += 1
                         state['lastRepTime'] = current_time
                         state['stage'] = "up"
                         feedback = "Rep complete!"
                     else:
-                        # Still in cooldown period
                         feedback = "Slow down slightly"
                 elif state['stage'] == "up":
-                    # Already in up position
                     feedback = "Lower arms to shoulder level for next rep"
             
             # FORM FEEDBACK
             elif one_wrist_above_shoulder and not both_wrists_above_shoulder:
                 feedback = "Press both arms evenly"
             elif not feedback:
-                # In-between positions
                 if state['stage'] == "up":
                     feedback = "Lower arms to shoulder level"
                 else:
                     feedback = "Continue the movement"
+
+        # Update position history for next frame
+        state['prev_left_wrist_y'] = left_wrist_y
+        state['prev_right_wrist_y'] = right_wrist_y
 
         return {
             'repCounter': state['repCounter'],
