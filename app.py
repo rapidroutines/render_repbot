@@ -491,7 +491,7 @@ def process_pushup(landmarks, state, current_time, rep_cooldown, hold_threshold)
 
 
 def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for shoulder press exercise"""
+    """Process landmarks for shoulder press exercise with improved rep counting"""
     try:
         # Get landmarks for both arms
         left_shoulder = landmarks[11]
@@ -507,6 +507,7 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
         left_wrist_above_shoulder = False
         right_wrist_above_shoulder = False
         angles = {}
+        feedback = ""
 
         # Calculate left arm position and angle
         if all(k in left_shoulder for k in ['x', 'y']) and all(k in left_elbow for k in ['x', 'y']) and all(k in left_wrist for k in ['x', 'y']):
@@ -573,31 +574,57 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
         both_wrists_above_shoulder = left_wrist_above_shoulder and right_wrist_above_shoulder
         one_wrist_above_shoulder = left_wrist_above_shoulder or right_wrist_above_shoulder
 
-        # Process shoulder press detection
-        feedback = ""
+        # Process shoulder press detection with improved state machine
         if avg_elbow_angle is not None:
-            # Starting (down) position - arms bent, wrists below shoulders
-            if avg_elbow_angle < 100 and both_wrists_below_shoulder:
-                state['stage'] = "down"
+            # IMPROVED LOGIC: More clearly define the "up" and "down" positions
+            
+            # DOWN POSITION: Arms bent, wrists at or below shoulders
+            in_down_position = avg_elbow_angle < 100 and both_wrists_below_shoulder
+            
+            # UP POSITION: Arms extended, wrists above shoulders
+            in_up_position = (avg_elbow_angle > 140 and both_wrists_above_shoulder) or (avg_elbow_angle > 150 and one_wrist_above_shoulder)
+            
+            # STATE TRANSITIONS with clearer logic
+            if in_down_position:
+                # If we were previously in the up position and now in down, we're ready for next rep
+                if state['stage'] == "up":
+                    # Reset to down position, ready for next rep
+                    state['stage'] = "down"
+                    feedback = "Ready for next rep"
+                elif state['stage'] == "down":
+                    # Already in down position
+                    feedback = "Ready position - good start"
+                
+                # Always reset the hold timer when in down position
                 state['holdStart'] = current_time
-                feedback = "Ready position - good start"
-
-            # Up position - arms extended, wrists above shoulders
-            if avg_elbow_angle > 140 and (both_wrists_above_shoulder or (one_wrist_above_shoulder and avg_elbow_angle > 150)):
-                if state['stage'] == "down" and current_time - state['holdStart'] > hold_threshold and current_time - state['lastRepTime'] > rep_cooldown:
-                    state['stage'] = "up"
-                    state['repCounter'] += 1
-                    state['lastRepTime'] = current_time
-                    feedback = "Rep complete! Good press."
+                
+            elif in_up_position:
+                # If we were in down position and now reaching up, check for a rep
+                if state['stage'] == "down":
+                    # Only count if enough time has passed since the last rep
+                    if current_time - state['lastRepTime'] > rep_cooldown:
+                        state['repCounter'] += 1
+                        state['lastRepTime'] = current_time
+                        state['stage'] = "up"
+                        feedback = "Rep complete! Good press."
+                    else:
+                        # Still in cooldown period
+                        feedback = "Slow down a bit"
                 elif state['stage'] == "up":
-                    feedback = "Press complete - hold position"
-
-            # Form feedback
-            if state['stage'] == "down" and avg_elbow_angle < 65:
+                    # Already in up position
+                    feedback = "Lower arms to start next rep"
+            
+            # FORM FEEDBACK
+            elif state['stage'] == "down" and avg_elbow_angle < 65:
                 feedback = "Start with arms higher"
-
-            if one_wrist_above_shoulder and not both_wrists_above_shoulder and state['stage'] == "up":
+            elif one_wrist_above_shoulder and not both_wrists_above_shoulder:
                 feedback = "Press both arms evenly"
+            elif not feedback:
+                # In-between positions
+                if state['stage'] == "up":
+                    feedback = "Lower arms completely"
+                else:
+                    feedback = "Continue the movement"
 
         return {
             'repCounter': state['repCounter'],
@@ -613,7 +640,6 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
             'stage': state['stage'],
             'feedback': f"Error: {str(e)}"
         }
-
 
 def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_threshold):
     """Process landmarks for floor tricep extension exercise"""
