@@ -319,7 +319,7 @@ def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
             # Now we make it easier by:
             # 1. Increasing the knee angle threshold (less bend required)
             # 2. Reducing the hip height requirement (less depth required)
-            if avg_knee_angle < 140 and hip_height > 0.6 and state['stage'] == "up":
+            if avg_knee_angle < 130 and hip_height > 0.6 and state['stage'] == "up":
                 if current_time - state['holdStart'] > hold_threshold and current_time - state['lastRepTime'] > rep_cooldown:
                     state['stage'] = "down"
                     state['repCounter'] += 1
