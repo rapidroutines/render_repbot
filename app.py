@@ -833,60 +833,6 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
         }
 
 
-# Run the app
-if __name__ == '__main__':
-    # Get port from environment variable or use default (8080)
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host='0.0.0.0', port=port, debug=False)
-                'position': {
-                    'x': right_elbow['x'],
-                    'y': right_elbow['y']
-                }
-            }
-
-            # Detect right arm curl
-            if right_angle > 150:
-                state['rightArmStage'] = "down"
-                state['rightArmHoldStart'] = current_time
-            if right_angle < 40 and state['rightArmStage'] == "down":
-                if current_time - state['rightArmHoldStart'] > hold_threshold:
-                    right_curl_detected = True
-                    state['rightArmStage'] = "up"
-
-        # Count rep if either arm completes a curl and enough time has passed since last rep
-        if (left_curl_detected or right_curl_detected) and current_time - state['lastRepTime'] > rep_cooldown:
-            state['repCounter'] += 1
-            state['lastRepTime'] = current_time
-            
-            # Generate feedback
-            feedback = "Good rep!"
-            if left_curl_detected and right_curl_detected:
-                feedback = "Great form! Both arms curled."
-            elif left_curl_detected:
-                feedback = "Left arm curl detected."
-            elif right_curl_detected:
-                feedback = "Right arm curl detected."
-
-            return {
-                'repCounter': state['repCounter'],
-                'stage': 'up' if left_curl_detected or right_curl_detected else 'down',
-                'feedback': feedback,
-                'angles': angles
-            }
-
-        return {
-            'repCounter': state['repCounter'],
-            'stage': state['leftArmStage'] if left_curl_detected else state['rightArmStage'],
-            'angles': angles
-        }
-        
-    except Exception as e:
-        print(f"Error in bicep curl detection: {str(e)}")
-        return {
-            'repCounter': state['repCounter'],
-            'stage': state['stage'],
-            'feedback': f"Error: {str(e)}"
-        }
 
 
 # Run the app
