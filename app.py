@@ -77,10 +77,6 @@ def process_landmarks():
             result = process_pushup(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
         elif exercise_type == 'shoulderPress':
             result = process_shoulder_press(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
-        elif exercise_type == 'situp':
-            result = process_situp(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
-        elif exercise_type == 'jumpingJacks':
-            result = process_jumping_jacks(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
         elif exercise_type == 'lunge':
             result = process_lunge(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
         
