@@ -77,6 +77,8 @@ def process_landmarks():
             result = process_pushup(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
         elif exercise_type == 'shoulderPress':
             result = process_shoulder_press(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
+        elif exercise_type == 'tricepExtension':
+            result = process_tricep_extension(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
         elif exercise_type == 'lunge':
             result = process_lunge(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
         
