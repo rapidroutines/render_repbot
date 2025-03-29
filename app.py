@@ -491,7 +491,7 @@ def process_pushup(landmarks, state, current_time, rep_cooldown, hold_threshold)
 
 
 def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for shoulder press exercise with improved rep counting"""
+    """Process landmarks for shoulder press exercise with modified range requirements"""
     try:
         # Get landmarks for both arms
         left_shoulder = landmarks[11]
@@ -506,6 +506,8 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
         right_elbow_angle = None
         left_wrist_above_shoulder = False
         right_wrist_above_shoulder = False
+        left_elbow_at_shoulder = False
+        right_elbow_at_shoulder = False
         angles = {}
         feedback = ""
 
@@ -522,6 +524,11 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
 
             # Check if left wrist is above shoulder
             left_wrist_above_shoulder = left_wrist['y'] < left_shoulder['y']
+            
+            # NEW: Check if left elbow is approximately at shoulder height
+            # Allow for a small range to make detection more reliable
+            left_elbow_at_shoulder = abs(left_elbow['y'] - left_shoulder['y']) < 0.05
+            
             angles['LWristPos'] = {
                 'value': 1 if left_wrist_above_shoulder else 0,
                 'position': {
@@ -543,6 +550,10 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
 
             # Check if right wrist is above shoulder
             right_wrist_above_shoulder = right_wrist['y'] < right_shoulder['y']
+            
+            # NEW: Check if right elbow is approximately at shoulder height
+            right_elbow_at_shoulder = abs(right_elbow['y'] - right_shoulder['y']) < 0.05
+            
             angles['RWristPos'] = {
                 'value': 1 if right_wrist_above_shoulder else 0,
                 'position': {
@@ -569,22 +580,23 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
         elif right_elbow_angle is not None:
             avg_elbow_angle = right_elbow_angle
 
-        # Determine arm positions for stage detection
-        both_wrists_below_shoulder = not left_wrist_above_shoulder and not right_wrist_above_shoulder
+        # NEW: Determine arm positions with modified requirements
         both_wrists_above_shoulder = left_wrist_above_shoulder and right_wrist_above_shoulder
         one_wrist_above_shoulder = left_wrist_above_shoulder or right_wrist_above_shoulder
+        
+        # NEW: Check for elbows at shoulder level (modified down position)
+        elbows_at_shoulder_level = (left_elbow_at_shoulder or right_elbow_at_shoulder)
 
-        # Process shoulder press detection with improved state machine
+        # Process shoulder press detection with improved state machine and modified requirements
         if avg_elbow_angle is not None:
-            # IMPROVED LOGIC: More clearly define the "up" and "down" positions
+            # MODIFIED DOWN POSITION: Now we only require elbows to be around shoulder height
+            # and a moderate bend in the arms, not requiring wrists to be below shoulders
+            in_down_position = (avg_elbow_angle < 120) and (elbows_at_shoulder_level or not both_wrists_above_shoulder)
             
-            # DOWN POSITION: Arms bent, wrists at or below shoulders
-            in_down_position = avg_elbow_angle < 100 and both_wrists_below_shoulder
-            
-            # UP POSITION: Arms extended, wrists above shoulders
+            # UP POSITION: Still requires arms extended with wrists above shoulders
             in_up_position = (avg_elbow_angle > 140 and both_wrists_above_shoulder) or (avg_elbow_angle > 150 and one_wrist_above_shoulder)
             
-            # STATE TRANSITIONS with clearer logic
+            # STATE TRANSITIONS with modified position requirements
             if in_down_position:
                 # If we were previously in the up position and now in down, we're ready for next rep
                 if state['stage'] == "up":
@@ -593,7 +605,7 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
                     feedback = "Ready for next rep"
                 elif state['stage'] == "down":
                     # Already in down position
-                    feedback = "Ready position - good start"
+                    feedback = "Ready position"
                 
                 # Always reset the hold timer when in down position
                 state['holdStart'] = current_time
@@ -606,23 +618,21 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
                         state['repCounter'] += 1
                         state['lastRepTime'] = current_time
                         state['stage'] = "up"
-                        feedback = "Rep complete! Good press."
+                        feedback = "Rep complete!"
                     else:
                         # Still in cooldown period
-                        feedback = "Slow down a bit"
+                        feedback = "Slow down slightly"
                 elif state['stage'] == "up":
                     # Already in up position
-                    feedback = "Lower arms to start next rep"
+                    feedback = "Lower arms to shoulder level for next rep"
             
             # FORM FEEDBACK
-            elif state['stage'] == "down" and avg_elbow_angle < 65:
-                feedback = "Start with arms higher"
             elif one_wrist_above_shoulder and not both_wrists_above_shoulder:
                 feedback = "Press both arms evenly"
             elif not feedback:
                 # In-between positions
                 if state['stage'] == "up":
-                    feedback = "Lower arms completely"
+                    feedback = "Lower arms to shoulder level"
                 else:
                     feedback = "Continue the movement"
 
