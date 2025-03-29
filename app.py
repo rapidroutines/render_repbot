@@ -173,10 +173,10 @@ def process_bicep_curl(landmarks, state, current_time, rep_cooldown, hold_thresh
             }
 
             # Detect left arm curl
-            if left_angle > 150:
+            if left_angle > 140:
                 state['leftArmStage'] = "down"
                 state['leftArmHoldStart'] = current_time
-            if left_angle < 40 and state['leftArmStage'] == "down":
+            if left_angle < 50 and state['leftArmStage'] == "down":
                 if current_time - state['leftArmHoldStart'] > hold_threshold:
                     left_curl_detected = True
                     state['leftArmStage'] = "up"
@@ -194,10 +194,10 @@ def process_bicep_curl(landmarks, state, current_time, rep_cooldown, hold_thresh
             }
 
             # Detect right arm curl
-            if right_angle > 150:
+            if right_angle > 140:
                 state['rightArmStage'] = "down"
                 state['rightArmHoldStart'] = current_time
-            if right_angle < 40 and state['rightArmStage'] == "down":
+            if right_angle < 50 and state['rightArmStage'] == "down":
                 if current_time - state['rightArmHoldStart'] > hold_threshold:
                     right_curl_detected = True
                     state['rightArmStage'] = "up"
