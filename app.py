@@ -77,8 +77,6 @@ def process_landmarks():
             result = process_pushup(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
         elif exercise_type == 'shoulderPress':
             result = process_shoulder_press(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
-        elif exercise_type == 'tricepExtension':
-            result = process_tricep_extension(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
         elif exercise_type == 'lunge':
             result = process_lunge(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
         
@@ -134,7 +132,7 @@ def calculate_angle(a, b, c):
         return 0
 
 
-def process_bicep_curl(landmarks, state, current_time, rep_cooldown, hold_threshold):    #working
+def process_bicep_curl(landmarks, state, current_time, rep_cooldown, hold_threshold):
     """Process landmarks for bicep curl exercise"""
     try:
         # Left arm
@@ -306,15 +304,13 @@ def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
         # Process squat detection using both knee angles and hip height
         if avg_knee_angle is not None and hip_height is not None:
             # Standing position detection (straight legs and higher hip position)
-            # More lenient: Changed from 160 to 150 degrees
-            if avg_knee_angle > 150 and hip_height < 0.6:
+            if avg_knee_angle > 160 and hip_height < 0.6:
                 state['stage'] = "up"
                 state['holdStart'] = current_time
                 feedback = "Standing position"
             
             # Squat position detection (bent knees and lower hip position)
-            # More lenient: Changed from 120 to 130 degrees, and hip height from 0.65 to 0.6
-            if avg_knee_angle < 130 and hip_height > 0.6 and state['stage'] == "up":
+            if avg_knee_angle < 120 and hip_height > 0.65 and state['stage'] == "up":
                 if current_time - state['holdStart'] > hold_threshold and current_time - state['lastRepTime'] > rep_cooldown:
                     state['stage'] = "down"
                     state['repCounter'] += 1
@@ -340,7 +336,7 @@ def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
             'angles': {}
         }
 
-def process_pushup(landmarks, state, current_time, rep_cooldown, hold_threshold):  #working
+def process_pushup(landmarks, state, current_time, rep_cooldown, hold_threshold):
     """Process landmarks for pushup exercise using similar logic to the JavaScript implementation"""
     try:
         # Get landmarks for both arms and shoulders
@@ -445,23 +441,20 @@ def process_pushup(landmarks, state, current_time, rep_cooldown, hold_threshold)
             }
             
             # Check alignment and add warning if needed
-            # More lenient: Changed from 15 to 20 degrees
-            if body_alignment > 20:
+            if body_alignment > 15:
                 warnings.append("Keep body straight!")
 
         # Process pushup detection using elbow angles, body height, and alignment
         status = ""
         if avg_elbow_angle is not None and body_height is not None:
             # Up position detection (straight arms, higher body position)
-            # More lenient: Changed from 160 to 150 degrees, and body height from 0.7 to 0.75
-            if avg_elbow_angle > 150 and body_height < 0.75:
+            if avg_elbow_angle > 160 and body_height < 0.7:
                 state['stage'] = "up"
                 state['holdStart'] = current_time
                 status = "Up Position"
 
             # Down position detection (bent arms, lower body position)
-            # More lenient: Changed from 90 to 100 degrees
-            if avg_elbow_angle < 100 and state['stage'] == "up":
+            if avg_elbow_angle < 90 and state['stage'] == "up":
                 if current_time - state['holdStart'] > hold_threshold and current_time - state['lastRepTime'] > rep_cooldown:
                     state['stage'] = "down"
                     state['repCounter'] += 1
@@ -494,213 +487,163 @@ def process_pushup(landmarks, state, current_time, rep_cooldown, hold_threshold)
 
 
 def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for shoulder press exercise"""
+    """Process landmarks for shoulder press exercise with proper rep counting"""
     try:
-        # Left arm
+        # Get landmarks for both arms
         left_shoulder = landmarks[11]
         left_elbow = landmarks[13]
         left_wrist = landmarks[15]
-        
-        # Right arm
         right_shoulder = landmarks[12]
         right_elbow = landmarks[14]
         right_wrist = landmarks[16]
-        
-        # Track state for both arms
-        left_angle = None
-        right_angle = None
-        left_press_detected = False
-        right_press_detected = False
+
+        # Variables to store angles and positions
+        left_elbow_angle = None
+        right_elbow_angle = None
+        left_wrist_above_shoulder = False
+        right_wrist_above_shoulder = False
         angles = {}
-        
-        # Calculate and store left arm angle
+        positions = {}
+        feedback = ""
+        warnings = []
+
+        # Calculate left arm position and angle
         if all(k in left_shoulder for k in ['x', 'y']) and all(k in left_elbow for k in ['x', 'y']) and all(k in left_wrist for k in ['x', 'y']):
-            left_angle = calculate_angle(left_wrist, left_elbow, left_shoulder)
+            left_elbow_angle = calculate_angle(left_wrist, left_elbow, left_shoulder)
+            
+            # Check if left wrist is above shoulder
+            left_wrist_above_shoulder = left_wrist['y'] < left_shoulder['y']
             
             # Store angle with position data
             angles['L'] = {
-                'value': left_angle,
+                'value': left_elbow_angle,
                 'position': {
-                    'x': left_elbow['x'],
+                    'x': left_elbow['x'] + 0.05,
                     'y': left_elbow['y']
                 }
             }
             
-            # Detect left arm press
-            if left_angle > 150:
-                state['leftArmStage'] = "down"
-            
-            if left_angle < 60 and state.get('leftArmStage') == "down":
-                left_press_detected = True
-                state['leftArmStage'] = "up"
-        
-        # Calculate and store right arm angle
+            # Store wrist position indicator
+            positions['LWrist'] = {
+                'value': "↑" if left_wrist_above_shoulder else "↓",
+                'position': {
+                    'x': left_wrist['x'],
+                    'y': left_wrist['y'] - 0.02
+                },
+                'color': "#00FF00" if left_wrist_above_shoulder else "#FF9900"
+            }
+
+        # Calculate right arm position and angle
         if all(k in right_shoulder for k in ['x', 'y']) and all(k in right_elbow for k in ['x', 'y']) and all(k in right_wrist for k in ['x', 'y']):
-            right_angle = calculate_angle(right_wrist, right_elbow, right_shoulder)
+            right_elbow_angle = calculate_angle(right_wrist, right_elbow, right_shoulder)
+            
+            # Check if right wrist is above shoulder
+            right_wrist_above_shoulder = right_wrist['y'] < right_shoulder['y']
             
             # Store angle with position data
             angles['R'] = {
-                'value': right_angle,
+                'value': right_elbow_angle,
                 'position': {
-                    'x': right_elbow['x'],
+                    'x': right_elbow['x'] + 0.05,
                     'y': right_elbow['y']
                 }
             }
             
-            # Detect right arm press
-            if right_angle > 150:
-                state['rightArmStage'] = "down"
-            
-            if right_angle < 60 and state.get('rightArmStage') == "down":
-                right_press_detected = True
-                state['rightArmStage'] = "up"
-        
-        # Count rep if either arm completes a press
-        if left_press_detected or right_press_detected:
-            state['repCounter'] += 1
-            state['lastRepTime'] = current_time
-            
-            # Simple feedback
-            feedback = "Rep complete!"
-            
-            return {
-                'repCounter': state['repCounter'],
-                'stage': 'up' if left_press_detected or right_press_detected else 'down',
-                'feedback': feedback,
-                'angles': angles
+            # Store wrist position indicator
+            positions['RWrist'] = {
+                'value': "↑" if right_wrist_above_shoulder else "↓",
+                'position': {
+                    'x': right_wrist['x'],
+                    'y': right_wrist['y'] - 0.02
+                },
+                'color': "#00FF00" if right_wrist_above_shoulder else "#FF9900"
             }
-        
-        # Return current state if no rep detected
+
+        # Calculate average elbow angle if both are available
+        avg_elbow_angle = None
+        if left_elbow_angle is not None and right_elbow_angle is not None:
+            avg_elbow_angle = (left_elbow_angle + right_elbow_angle) / 2
+            
+            # Store average angle with position between elbows
+            angles['Avg'] = {
+                'value': avg_elbow_angle,
+                'position': {
+                    'x': (left_elbow['x'] + right_elbow['x']) / 2,
+                    'y': (left_elbow['y'] + right_elbow['y']) / 2 - 0.05
+                }
+            }
+        elif left_elbow_angle is not None:
+            avg_elbow_angle = left_elbow_angle
+        elif right_elbow_angle is not None:
+            avg_elbow_angle = right_elbow_angle
+
+        # Determine arm positions for stage detection
+        both_wrists_below_shoulder = not left_wrist_above_shoulder and not right_wrist_above_shoulder
+        both_wrists_above_shoulder = left_wrist_above_shoulder and right_wrist_above_shoulder
+        one_wrist_above_shoulder = left_wrist_above_shoulder or right_wrist_above_shoulder
+
+        # Process shoulder press detection
+        status = ""
+        if avg_elbow_angle is not None:
+            # Starting (down) position - arms bent, wrists below shoulders
+            if avg_elbow_angle < 100 and both_wrists_below_shoulder:
+                # Only reset to down if we were previously up
+                # This is key for the press cycle to work properly
+                if state['stage'] == "up":
+                    state['stage'] = "down"
+                    state['holdStart'] = current_time
+                    
+                # If we're already in down stage, just update status
+                if state['stage'] == "down":
+                    status = "Ready Position"
+                    feedback = "Ready position - good start"
+
+            # Up position - arms extended, wrists above shoulders
+            if avg_elbow_angle > 140 and (both_wrists_above_shoulder or (one_wrist_above_shoulder and avg_elbow_angle > 150)):
+                if state['stage'] == "down" and current_time - state['holdStart'] > hold_threshold and current_time - state['lastRepTime'] > rep_cooldown:
+                    state['stage'] = "up"
+                    state['repCounter'] += 1
+                    state['lastRepTime'] = current_time
+                    status = "Rep Complete!"
+                    feedback = "Rep complete! Good press."
+                elif state['stage'] == "up":
+                    status = "Press Complete"
+                    feedback = "Press complete - now return to starting position"
+
+            # Form feedback
+            if state['stage'] == "down" and avg_elbow_angle < 65:
+                warnings.append("Start higher!")
+                feedback = "Start with arms higher"
+
+            if one_wrist_above_shoulder and not both_wrists_above_shoulder and state['stage'] == "up":
+                warnings.append("Press both arms evenly!")
+                feedback = "Press both arms evenly"
+
         return {
             'repCounter': state['repCounter'],
-            'stage': state.get('leftArmStage', 'down') if left_angle is not None else state.get('rightArmStage', 'down'),
-            'angles': angles
+            'stage': state['stage'],
+            'feedback': feedback,
+            'angles': angles,
+            'positions': positions,
+            'status': status,
+            'warnings': warnings
         }
         
     except Exception as e:
         print(f"Error in shoulder press detection: {str(e)}")
         return {
-            'repCounter': state.get('repCounter', 0),
-            'stage': state.get('stage', 'down'),
-            'feedback': f"Error: {str(e)}"
-        }
-
-def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for floor tricep extension exercise"""
-    try:
-        # Left arm
-        left_shoulder = landmarks[11]
-        left_elbow = landmarks[13]
-        left_wrist = landmarks[15]
-
-        # Right arm
-        right_shoulder = landmarks[12]
-        right_elbow = landmarks[14]
-        right_wrist = landmarks[16]
-
-        # Track state for both arms
-        left_angle = None
-        right_angle = None
-        left_extension_detected = False
-        right_extension_detected = False
-        angles = {}
-        feedback = ""
-
-        # Calculate and store left arm angle
-        if all(k in left_shoulder for k in ['x', 'y']) and all(k in left_elbow for k in ['x', 'y']) and all(k in left_wrist for k in ['x', 'y']):
-            left_angle = calculate_angle(left_shoulder, left_elbow, left_wrist)
-            # Store angle with position data
-            angles['L'] = {
-                'value': left_angle,
-                'position': {
-                    'x': left_elbow['x'],
-                    'y': left_elbow['y']
-                }
-            }
-
-            # Detect left arm extension
-            # For tricep extensions: bent arm is "down", straight arm is "up"
-            if left_angle < 110:  # Arm is bent (starting position) - more lenient threshold
-                if state['leftArmStage'] != "down":
-                    feedback = "Left arm ready position"
-                state['leftArmStage'] = "down"
-                state['leftArmHoldStart'] = current_time
-            elif left_angle > 140 and state['leftArmStage'] == "down":  # Arm is extended - more lenient threshold
-                if current_time - state['leftArmHoldStart'] > hold_threshold:
-                    left_extension_detected = True
-                    state['leftArmStage'] = "up"
-                    feedback = "Left arm extended"
-
-        # Calculate and store right arm angle
-        if all(k in right_shoulder for k in ['x', 'y']) and all(k in right_elbow for k in ['x', 'y']) and all(k in right_wrist for k in ['x', 'y']):
-            right_angle = calculate_angle(right_shoulder, right_elbow, right_wrist)
-            # Store angle with position data
-            angles['R'] = {
-                'value': right_angle,
-                'position': {
-                    'x': right_elbow['x'],
-                    'y': right_elbow['y']
-                }
-            }
-
-            # Detect right arm extension
-            if right_angle < 110:  # Arm is bent (starting position) - more lenient threshold
-                if state['rightArmStage'] != "down":
-                    feedback = "Right arm ready position"
-                state['rightArmStage'] = "down"
-                state['rightArmHoldStart'] = current_time
-            elif right_angle > 140 and state['rightArmStage'] == "down":  # Arm is extended - more lenient threshold
-                if current_time - state['rightArmHoldStart'] > hold_threshold:
-                    right_extension_detected = True
-                    state['rightArmStage'] = "up"
-                    feedback = "Right arm extended"
-
-        # Calculate average arm angle if both are available
-        if left_angle is not None and right_angle is not None:
-            avg_angle = (left_angle + right_angle) / 2
-            # Position between both elbows
-            mid_x = (left_elbow['x'] + right_elbow['x']) / 2
-            mid_y = (left_elbow['y'] + right_elbow['y']) / 2
-            angles['Avg'] = {
-                'value': avg_angle,
-                'position': {
-                    'x': mid_x,
-                    'y': mid_y - 0.05  # Offset upward
-                }
-            }
-
-        # Count rep if either arm completes an extension and enough time has passed since last rep
-        if (left_extension_detected or right_extension_detected) and current_time - state['lastRepTime'] > rep_cooldown:
-            state['repCounter'] += 1
-            state['lastRepTime'] = current_time
-            
-            # Generate feedback
-            if left_extension_detected and right_extension_detected:
-                feedback = "Great form! Both arms extended fully."
-            elif left_extension_detected:
-                feedback = "Left arm extension complete."
-            elif right_extension_detected:
-                feedback = "Right arm extension complete."
-
-        # Always include the current stage in the response
-        return {
-            'repCounter': state['repCounter'],
-            'stage': state['leftArmStage'] if left_angle is not None else (state['rightArmStage'] if right_angle is not None else state['stage']),
-            'feedback': feedback,
-            'angles': angles,
-            'status': f"L:{state['leftArmStage']} R:{state['rightArmStage']}" # Debug info
-        }
-        
-    except Exception as e:
-        print(f"Error in tricep extension detection: {str(e)}")
-        return {
             'repCounter': state['repCounter'],
             'stage': state['stage'],
             'feedback': f"Error: {str(e)}",
-            'angles': {}
+            'angles': {},
+            'positions': {},
+            'status': "",
+            'warnings': []
         }
 
-def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold): #working
+
+
+def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
     """Process landmarks for lunge exercise using similar logic to the JavaScript implementation"""
     try:
         # Get landmarks for both sides of the body
@@ -785,19 +728,16 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
         }
 
         # Track standing position - both legs relatively straight
-        # More lenient: Changed from 150 to 140 degrees, and knee height diff from 0.1 to 0.15
         feedback = ""
-        if (left_leg_angle > 140 and right_leg_angle > 140) and knee_height_diff < 0.15:
+        if (left_leg_angle > 150 and right_leg_angle > 150) and knee_height_diff < 0.1:
             state['stage'] = "up"
             state['holdStart'] = current_time
             feedback = "Standing position - prepare for lunge"
 
         # Proper lunge detection - front leg bent, back leg straighter, significant height difference
-        # More lenient: Changed front knee angle from 110 to 120, back knee angle from 130 to 120,
-        # and knee height difference from 0.2 to 0.15
-        proper_front_angle = front_leg_angle < 120  # Front knee should be bent (~90° is ideal)
-        proper_back_angle = back_leg_angle > 120    # Back leg should be straighter
-        proper_knee_height = knee_height_diff > 0.15  # Sufficient height difference between knees
+        proper_front_angle = front_leg_angle < 110  # Front knee should be bent (~90° is ideal)
+        proper_back_angle = back_leg_angle > 130    # Back leg should be straighter
+        proper_knee_height = knee_height_diff > 0.2  # Sufficient height difference between knees
 
         if proper_front_angle and proper_back_angle and proper_knee_height and state['stage'] == "up":
             if current_time - state['holdStart'] > hold_threshold and current_time - state['lastRepTime'] > rep_cooldown:
@@ -813,7 +753,7 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
             feedback = "Bend your front knee more"
         elif state['stage'] == "down" and not proper_back_angle:
             feedback = "Keep your back leg straighter"
-        elif state['stage'] == "up" and knee_height_diff > 0.15:
+        elif state['stage'] == "up" and knee_height_diff > 0.1:
             feedback = "Stand with feet together"
 
         return {
@@ -831,8 +771,6 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
             'feedback': f"Error: {str(e)}",
             'angles': {}
         }
-
-
 
 
 # Run the app
