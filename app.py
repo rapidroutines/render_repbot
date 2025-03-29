@@ -235,7 +235,7 @@ def process_bicep_curl(landmarks, state, current_time, rep_cooldown, hold_thresh
 
 
 def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for squat exercise using similar logic to the JavaScript implementation"""
+    """Process landmarks for squat exercise with reduced depth requirement"""
     try:
         # Get landmarks for both legs
         left_hip = landmarks[23]
@@ -259,7 +259,7 @@ def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
             angles['L'] = {
                 'value': left_knee_angle,
                 'position': {
-                    'x': left_knee['x'] + 0.05,  # Offset a bit to the right like in JS
+                    'x': left_knee['x'] + 0.05,  # Offset a bit to the right
                     'y': left_knee['y']
                 }
             }
@@ -270,7 +270,7 @@ def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
             angles['R'] = {
                 'value': right_knee_angle,
                 'position': {
-                    'x': right_knee['x'] + 0.05,  # Offset a bit to the right like in JS
+                    'x': right_knee['x'] + 0.05,  # Offset a bit to the right
                     'y': right_knee['y']
                 }
             }
@@ -285,7 +285,7 @@ def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
                 'value': avg_knee_angle,
                 'position': {
                     'x': mid_x,
-                    'y': mid_y - 0.05  # Offset upward like in JS
+                    'y': mid_y - 0.05  # Offset upward
                 }
             }
         elif left_knee_angle is not None:
@@ -301,20 +301,25 @@ def process_squat(landmarks, state, current_time, rep_cooldown, hold_threshold):
                 'value': hip_height * 100,  # Convert to percentage
                 'position': {
                     'x': mid_x,
-                    'y': hip_height - 0.05  # Offset upward like in JS
+                    'y': hip_height - 0.05  # Offset upward
                 }
             }
 
-        # Process squat detection using both knee angles and hip height
+        # Process squat detection with REDUCED DEPTH REQUIREMENT
         if avg_knee_angle is not None and hip_height is not None:
             # Standing position detection (straight legs and higher hip position)
+            # Keep the standing position criteria similar to original
             if avg_knee_angle > 160 and hip_height < 0.6:
                 state['stage'] = "up"
                 state['holdStart'] = current_time
                 feedback = "Standing position"
             
-            # Squat position detection (bent knees and lower hip position)
-            if avg_knee_angle < 120 and hip_height > 0.65 and state['stage'] == "up":
+            # MODIFIED: Less deep squat position detection
+            # Original required avg_knee_angle < 120 and hip_height > 0.65
+            # Now we make it easier by:
+            # 1. Increasing the knee angle threshold (less bend required)
+            # 2. Reducing the hip height requirement (less depth required)
+            if avg_knee_angle < 140 and hip_height > 0.6 and state['stage'] == "up":
                 if current_time - state['holdStart'] > hold_threshold and current_time - state['lastRepTime'] > rep_cooldown:
                     state['stage'] = "down"
                     state['repCounter'] += 1
