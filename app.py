@@ -494,7 +494,7 @@ def process_pushup(landmarks, state, current_time, rep_cooldown, hold_threshold)
 
 
 def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for shoulder press exercise with proper rep counting"""
+    """Process landmarks for shoulder press exercise with immediate rep counting"""
     try:
         # Get landmarks for both arms
         left_shoulder = landmarks[11]
@@ -597,25 +597,21 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
                 # Only reset to down if we were previously up
                 if state['stage'] == "up":
                     state['stage'] = "down"
-                    state['holdStart'] = current_time
-                    
-                # If we're already in down stage, just update status
-                if state['stage'] == "down":
                     status = "Ready Position"
-                    feedback = "Ready position - good start"
+                    feedback = "Ready for next rep"
 
             # Up position - arms extended, wrists above shoulders
-            if avg_elbow_angle > 130 and (both_wrists_above_shoulder or (one_wrist_above_shoulder and avg_elbow_angle > 140)):
+            elif avg_elbow_angle > 130 and (both_wrists_above_shoulder or (one_wrist_above_shoulder and avg_elbow_angle > 140)):
                 if state['stage'] == "down":
-                    # Removed the hold threshold and cooldown checks
+                    # Count rep immediately when reaching up position
                     state['stage'] = "up"
                     state['repCounter'] += 1
                     state['lastRepTime'] = current_time
                     status = "Rep Complete!"
-                    feedback = "Rep complete! Good press."
-                elif state['stage'] == "up":
+                    feedback = "Rep complete! Return to starting position"
+                else:
                     status = "Press Complete"
-                    feedback = "Press complete - now return to starting position"
+                    feedback = "Return to starting position for next rep"
 
             # Form feedback
             if state['stage'] == "down" and avg_elbow_angle < 60:
@@ -643,7 +639,6 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
             'status': "",
             'warnings': []
         }
-
 def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_threshold):
     """Process landmarks for floor tricep extension exercise"""
     try:
