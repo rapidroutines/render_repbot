@@ -924,15 +924,13 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
 
 
 def process_calf_raises(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for calf raises exercise"""
+    """Process landmarks for calf raises exercise with more lenient detection"""
     try:
-        # Get landmarks for ankles, knees, and hips
+        # Get landmarks for ankles, knees, and feet
         left_ankle = landmarks[27]
         right_ankle = landmarks[28]
         left_knee = landmarks[25]
         right_knee = landmarks[26]
-        left_hip = landmarks[23]
-        right_hip = landmarks[24]
         left_heel = landmarks[29]  # MediaPipe provides heel landmarks
         right_heel = landmarks[30]
         left_foot_index = landmarks[31]  # Toe point
@@ -942,9 +940,14 @@ def process_calf_raises(landmarks, state, current_time, rep_cooldown, hold_thres
         angles = {}
         feedback = ""
         
-        # Check if all required landmarks are visible
-        if not all(point and all(k in point for k in ['x', 'y']) 
-                  for point in [left_ankle, right_ankle, left_knee, right_knee]):
+        # Check if at least one foot is visible with required landmarks
+        left_foot_visible = all(point and all(k in point for k in ['x', 'y']) 
+                              for point in [left_ankle, left_heel, left_foot_index])
+        
+        right_foot_visible = all(point and all(k in point for k in ['x', 'y']) 
+                               for point in [right_ankle, right_heel, right_foot_index])
+        
+        if not (left_foot_visible or right_foot_visible):
             return {
                 'repCounter': state['repCounter'],
                 'stage': state['stage'],
@@ -957,7 +960,7 @@ def process_calf_raises(landmarks, state, current_time, rep_cooldown, hold_thres
         left_heel_lift = 0
         right_heel_lift = 0
         
-        if all(k in left_heel for k in ['x', 'y']) and all(k in left_ankle for k in ['x', 'y']):
+        if left_foot_visible:
             left_heel_lift = left_ankle['y'] - left_heel['y']
             angles['LHeelLift'] = {
                 'value': left_heel_lift * 100,  # Convert to percentage for display
@@ -967,7 +970,7 @@ def process_calf_raises(landmarks, state, current_time, rep_cooldown, hold_thres
                 }
             }
         
-        if all(k in right_heel for k in ['x', 'y']) and all(k in right_ankle for k in ['x', 'y']):
+        if right_foot_visible:
             right_heel_lift = right_ankle['y'] - right_heel['y']
             angles['RHeelLift'] = {
                 'value': right_heel_lift * 100,  # Convert to percentage for display
@@ -981,7 +984,7 @@ def process_calf_raises(landmarks, state, current_time, rep_cooldown, hold_thres
         left_foot_angle = None
         right_foot_angle = None
         
-        if all(k in left_ankle for k in ['x', 'y']) and all(k in left_heel for k in ['x', 'y']) and all(k in left_foot_index for k in ['x', 'y']):
+        if left_foot_visible:
             left_foot_angle = calculate_angle(left_heel, left_ankle, left_foot_index)
             angles['LFootAngle'] = {
                 'value': left_foot_angle,
@@ -991,7 +994,7 @@ def process_calf_raises(landmarks, state, current_time, rep_cooldown, hold_thres
                 }
             }
             
-        if all(k in right_ankle for k in ['x', 'y']) and all(k in right_heel for k in ['x', 'y']) and all(k in right_foot_index for k in ['x', 'y']):
+        if right_foot_visible:
             right_foot_angle = calculate_angle(right_heel, right_ankle, right_foot_index)
             angles['RFootAngle'] = {
                 'value': right_foot_angle,
@@ -1023,53 +1026,50 @@ def process_calf_raises(landmarks, state, current_time, rep_cooldown, hold_thres
             angles['AvgLift'] = {
                 'value': avg_heel_lift * 100,  # Convert to percentage
                 'position': {
-                    'x': (left_ankle['x'] + right_ankle['x']) / 2,
-                    'y': (left_ankle['y'] + right_ankle['y']) / 2 + 0.1
+                    'x': (left_ankle['x'] + right_ankle['x']) / 2 if right_foot_visible and left_foot_visible else 
+                         (left_ankle['x'] if left_foot_visible else right_ankle['x']),
+                    'y': (left_ankle['y'] + right_ankle['y']) / 2 if right_foot_visible and left_foot_visible else 
+                         (left_ankle['y'] if left_foot_visible else right_ankle['y']) + 0.1
                 }
             }
         
-        # Check body stability (knees and hips should remain relatively stable)
-        knee_stability = True
-        if all(k in left_knee for k in ['x', 'y']) and all(k in right_knee for k in ['x', 'y']):
-            knee_vertical_diff = abs(left_knee['y'] - right_knee['y'])
-            if knee_vertical_diff > 0.05:  # If knees are at very different heights
-                knee_stability = False
+        # MODIFIED DETECTION LOGIC: More lenient requirements
+        
+        # Define the stages with more lenient thresholds
+        # "down" = feet mostly flat, "up" = heels raised
+        
+        # MODIFIED: Less strict requirement for flat feet (down position)
+        # Allow for slight heel elevation in the starting position
+        if avg_heel_lift < 0.015:  # Small threshold for heel raise (was 0.01)
+            # If we were in the up position, complete the rep cycle
+            if state['stage'] == "up":
+                state['stage'] = "down"
+                feedback = "Good! Ready for next rep"
+            else:
+                state['stage'] = "down"
+                feedback = "Starting position - feet flat"
                 
-        # Process calf raise detection
-        # "down" = flat feet, "up" = raised heels
-        
-        # Flat feet detection (down position)
-        if avg_heel_lift < 0.01:  # Very small lift indicates flat feet
-            state['stage'] = "down"
             state['holdStart'] = current_time
-            feedback = "Starting position - feet flat"
         
-        # Raised heels detection (up position)
-        # Check if heels are raised AND foot is at proper angle
-        heel_raised = avg_heel_lift > 0.02  # Threshold for heel raise detection
-        good_foot_angle = avg_foot_angle < 80 if avg_foot_angle > 0 else False  # Foot should be at proper angle
+        # MODIFIED: Less strict requirement for raised position (up position)
+        # Any noticeable heel raise is accepted
+        heel_raised = avg_heel_lift > 0.015  # Lower threshold for heel raise detection (was 0.02)
         
-        if heel_raised and good_foot_angle and state['stage'] == "down":
-            if current_time - state['holdStart'] > hold_threshold and current_time - state['lastRepTime'] > rep_cooldown:
+        # Completely remove the foot angle requirement for counting reps
+        if heel_raised and state['stage'] == "down":
+            if current_time - state['lastRepTime'] > rep_cooldown:
                 state['stage'] = "up"
                 state['repCounter'] += 1
                 state['lastRepTime'] = current_time
-                
-                # Provide feedback on form
-                if not knee_stability:
-                    feedback = "Rep counted! Try to keep knees steady."
-                else:
-                    feedback = "Good rep! Nice calf raise."
+                feedback = "Rep counted! Good raise."
             else:
-                feedback = "Raised position - hold briefly"
+                feedback = "Slow down slightly"
                 
         # Form feedback
         if state['stage'] == "up" and not feedback:
-            feedback = "Lower heels completely to floor"
-        elif state['stage'] == "down" and heel_raised and not good_foot_angle:
-            feedback = "Rise up on the balls of your feet"
-        elif not knee_stability:
-            feedback = "Keep knees steady and even"
+            feedback = "Lower heels to floor for next rep"
+        elif state['stage'] == "down" and heel_raised and not feedback:
+            feedback = "Keep raising"
             
         return {
             'repCounter': state['repCounter'],
