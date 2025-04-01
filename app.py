@@ -795,7 +795,7 @@ def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_
         }
 
 def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for lunge exercise with more lenient detection criteria"""
+    """Process landmarks for lunge exercise with improved detection and no hold requirement"""
     try:
         # Get landmarks for both sides of the body
         left_hip = landmarks[23]
@@ -805,16 +805,10 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
         right_knee = landmarks[26]
         right_ankle = landmarks[28]
 
-        # Check if all landmarks are present with x, y coordinates
-        all_landmarks_visible = all(
-            point and all(k in point for k in ['x', 'y']) 
-            for point in [left_hip, left_knee, left_ankle, right_hip, right_knee, right_ankle]
-        )
-        
-        # Partial visibility check - at least one leg should be fully visible
-        left_leg_visible = all(k in point for k in ['x', 'y'] 
+        # Check if at least one leg is fully visible
+        left_leg_visible = all(point and all(k in point for k in ['x', 'y']) 
                               for point in [left_hip, left_knee, left_ankle])
-        right_leg_visible = all(k in point for k in ['x', 'y'] 
+        right_leg_visible = all(point and all(k in point for k in ['x', 'y']) 
                                for point in [right_hip, right_knee, right_ankle])
         
         if not (left_leg_visible or right_leg_visible):
@@ -860,7 +854,7 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
 
         # If both knees are visible, calculate height difference
         knee_height_diff = 0
-        if all_landmarks_visible:
+        if left_leg_visible and right_leg_visible:
             knee_height_diff = abs(left_knee['y'] - right_knee['y'])
             angles['KneeDiff'] = {
                 'value': knee_height_diff * 100,  # Convert to percentage for display
@@ -870,94 +864,117 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
                 }
             }
 
-        # Determine which leg is in front (lower knee is the front leg)
-        front_leg_angle = None
-        back_leg_angle = None
-        front_knee = None
-        back_knee = None
+        # Add position tracking to detect movement (similar to shoulder press)
+        if 'prev_left_knee_y' not in state:
+            state['prev_left_knee_y'] = None
+        if 'prev_right_knee_y' not in state:
+            state['prev_right_knee_y'] = None
 
-        if all_landmarks_visible:
-            if left_knee['y'] > right_knee['y']:  # Right knee is higher (in front in image coordinates)
-                front_leg_angle = right_leg_angle
-                back_leg_angle = left_leg_angle
-                front_knee = right_knee
-                back_knee = left_knee
-            else:  # Left knee is higher (in front in image coordinates)
-                front_leg_angle = left_leg_angle
-                back_leg_angle = right_leg_angle
-                front_knee = left_knee
-                back_knee = right_knee
-                
-            # Add these angles to the display data
-            if front_leg_angle is not None and back_leg_angle is not None:
-                angles['Front'] = {
-                    'value': front_leg_angle,
-                    'position': {
-                        'x': front_knee['x'],
-                        'y': front_knee['y']
-                    }
-                }
-                angles['Back'] = {
-                    'value': back_leg_angle,
-                    'position': {
-                        'x': back_knee['x'],
-                        'y': back_knee['y']
-                    }
-                }
-
-        # Track standing position - both legs relatively straight (more lenient)
-        feedback = ""
+        # Track vertical movement of knees
+        left_knee_moving_down = False
+        right_knee_moving_down = False
         
-        # MORE LENIENT: Allow standing detection with just one visible leg if it's straight
+        if left_leg_visible and state['prev_left_knee_y'] is not None:
+            left_knee_moving_down = left_knee['y'] > state['prev_left_knee_y'] 
+            # In image coordinates, y increases downward
+            left_knee_movement = abs(left_knee['y'] - state['prev_left_knee_y'])
+            angles['LKneeMoving'] = {
+                'value': left_knee_movement * 100,
+                'position': {
+                    'x': left_knee['x'] - 0.1,
+                    'y': left_knee['y']
+                }
+            }
+        
+        if right_leg_visible and state['prev_right_knee_y'] is not None:
+            right_knee_moving_down = right_knee['y'] > state['prev_right_knee_y']
+            # In image coordinates, y increases downward
+            right_knee_movement = abs(right_knee['y'] - state['prev_right_knee_y'])
+            angles['RKneeMoving'] = {
+                'value': right_knee_movement * 100,
+                'position': {
+                    'x': right_knee['x'] + 0.1,
+                    'y': right_knee['y']
+                }
+            }
+            
+        # Detect significant knee movement (going into lunge position)
+        significant_movement = False
+        if (left_leg_visible and state['prev_left_knee_y'] is not None and 
+            abs(left_knee['y'] - state['prev_left_knee_y']) > 0.01):
+            significant_movement = True
+        if (right_leg_visible and state['prev_right_knee_y'] is not None and 
+            abs(right_knee['y'] - state['prev_right_knee_y']) > 0.01):
+            significant_movement = True
+
+        # Store current positions for next frame comparison
+        if left_leg_visible:
+            state['prev_left_knee_y'] = left_knee['y']
+        if right_leg_visible:
+            state['prev_right_knee_y'] = right_knee['y']
+
+        # Define the positions with more lenient thresholds
+        
+        # Standing position - both legs relatively straight
         standing_detected = False
-        if all_landmarks_visible:
-            # Both legs visible - check if both are straight-ish and knees are at similar height
-            standing_detected = (left_leg_angle > 140 and right_leg_angle > 140) and knee_height_diff < 0.15
-        elif left_leg_visible and left_leg_angle > 140:
+        if left_leg_visible and right_leg_visible:
+            # Both legs visible - check if both are straight-ish
+            standing_detected = (left_leg_angle > 150 and right_leg_angle > 150 and knee_height_diff < 0.12)
+        elif left_leg_visible and left_leg_angle > 150:
             # Only left leg visible and it's straight
             standing_detected = True
-        elif right_leg_visible and right_leg_angle > 140:
+        elif right_leg_visible and right_leg_angle > 150:
             # Only right leg visible and it's straight
             standing_detected = True
             
-        if standing_detected:
-            state['stage'] = "up"
-            state['holdStart'] = current_time
-            feedback = "Standing position - prepare for lunge"
-
-        # Proper lunge detection - MORE LENIENT CRITERIA
+        # Lunge position - one leg bent
         lunge_detected = False
         
-        # If all landmarks are visible, use comprehensive criteria
-        if all_landmarks_visible and front_leg_angle is not None and back_leg_angle is not None:
-            # MORE LENIENT: Front leg doesn't need to be as bent, back leg can be more relaxed
-            proper_front_angle = front_leg_angle < 130  # Was 110, now 130 (more lenient)
-            proper_back_angle = back_leg_angle > 120    # Was 130, now 120 (more lenient)
-            proper_knee_height = knee_height_diff > 0.15  # Was 0.2, now 0.15 (more lenient)
-            
-            lunge_detected = proper_front_angle and proper_back_angle and proper_knee_height
-        # MORE LENIENT: Allow detecting lunges with single leg visibility
-        elif left_leg_visible and left_leg_angle < 130:
-            # Left leg is bent enough to potentially be in lunge position
+        # Check for lunge position with more lenient criteria
+        if left_leg_visible and right_leg_visible:
+            # One leg is sufficiently bent OR knees have significant height difference
+            lunge_detected = ((left_leg_angle < 140 or right_leg_angle < 140) and knee_height_diff > 0.1)
+        elif left_leg_visible and left_leg_angle < 140:
+            # Only left leg visible and it's bent
             lunge_detected = True
-        elif right_leg_visible and right_leg_angle < 130:
-            # Right leg is bent enough to potentially be in lunge position
+        elif right_leg_visible and right_leg_angle < 140:
+            # Only right leg visible and it's bent
             lunge_detected = True
-            
-        if lunge_detected and state['stage'] == "up":
-            if current_time - state['holdStart'] > hold_threshold and current_time - state['lastRepTime'] > rep_cooldown:
-                state['stage'] = "down"
-                state['repCounter'] += 1
-                state['lastRepTime'] = current_time
-                feedback = "Rep complete! Good lunge."
-            else:
-                feedback = "Lunge position - hold it"
+
+        # IMPROVED STATE TRANSITIONS (similar to shoulder press)
+        feedback = ""
         
-        # Simplified feedback - less critical of form
-        if state['stage'] == "down" and not feedback:
-            feedback = "Return to standing position"
-        elif state['stage'] == "up" and knee_height_diff > 0.15 and not feedback:
-            feedback = "Prepare for next lunge"
+        # Handle standing position detection (up position)
+        if standing_detected:
+            if state['stage'] == "down":
+                # Transition from lunge to standing - complete the rep cycle
+                state['stage'] = "up"
+                feedback = "Ready for next lunge"
+            elif state['stage'] == "up":
+                # Already in standing position
+                feedback = "Standing position"
+
+        # Handle lunge position detection (down position)
+        if lunge_detected:
+            # Only count a rep when transitioning from standing to lunge
+            # AND there's significant movement (to prevent false positives)
+            if state['stage'] == "up" and significant_movement:
+                if current_time - state['lastRepTime'] > rep_cooldown:
+                    state['stage'] = "down"
+                    state['repCounter'] += 1
+                    state['lastRepTime'] = current_time
+                    feedback = "Rep counted! Good lunge."
+                else:
+                    feedback = "Slow down slightly"
+            elif state['stage'] == "down":
+                feedback = "Return to standing position"
+
+        # Default feedback if none set yet
+        if not feedback:
+            if state['stage'] == "up":
+                feedback = "Step forward into lunge position"
+            else:
+                feedback = "Return to standing position"
 
         return {
             'repCounter': state['repCounter'],
