@@ -996,11 +996,11 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
         # Check for lunge position with more lenient criteria
         if left_leg_visible and right_leg_visible:
             # One leg is sufficiently bent AND knees have height difference
-            lunge_detected = ((left_leg_angle < 140 or right_leg_angle < 140) and knee_height_diff > 0.1)
-        elif left_leg_visible and left_leg_angle < 140:
+            lunge_detected = ((left_leg_angle < 110 or right_leg_angle < 110) and knee_height_diff > 0.2)
+        elif left_leg_visible and left_leg_angle < 110:
             # Only left leg visible and it's bent
             lunge_detected = True
-        elif right_leg_visible and right_leg_angle < 140:
+        elif right_leg_visible and right_leg_angle < 110:
             # Only right leg visible and it's bent
             lunge_detected = True
 
