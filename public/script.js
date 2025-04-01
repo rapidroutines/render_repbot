@@ -391,7 +391,7 @@ class ExerciseCounter {
             
             if (secondsLeft <= 0) {
                 clearInterval(countdownInterval);
-                window.location.href = "https://rapidroutines.org/dashboard/";
+                window.location.href = "https://www.rapidroutines-dashboard.org/";
             }
         }, 1000);
     }
