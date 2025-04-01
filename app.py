@@ -741,7 +741,7 @@ def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_
             if left_angle < 100:  # Arm is bent (starting position)
                 state['leftArmStage'] = "down"
                 state['leftArmHoldStart'] = current_time
-            if left_angle > 140 and state['leftArmStage'] == "down":  # Arm is extended
+            if left_angle > 130 and state['leftArmStage'] == "down":  # Arm is extended
                 if current_time - state['leftArmHoldStart'] > hold_threshold:
                     left_extension_detected = True
                     state['leftArmStage'] = "up"
@@ -762,7 +762,7 @@ def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_
             if right_angle < 100:  # Arm is bent (starting position)
                 state['rightArmStage'] = "down"
                 state['rightArmHoldStart'] = current_time
-            if right_angle > 140 and state['rightArmStage'] == "down":  # Arm is extended
+            if right_angle > 130 and state['rightArmStage'] == "down":  # Arm is extended
                 if current_time - state['rightArmHoldStart'] > hold_threshold:
                     right_extension_detected = True
                     state['rightArmStage'] = "up"
