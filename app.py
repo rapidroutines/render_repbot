@@ -1062,14 +1062,14 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
 
 
 def process_calf_raises(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for calf raises exercise with more lenient detection"""
+    """Process landmarks for calf raises exercise with enhanced detection and accuracy"""
     try:
-        # Get landmarks for ankles, knees, and feet
+        # Get landmarks for ankles, heels, feet, and knees for stability checks
         left_ankle = landmarks[27]
         right_ankle = landmarks[28]
         left_knee = landmarks[25]
         right_knee = landmarks[26]
-        left_heel = landmarks[29]  # MediaPipe provides heel landmarks
+        left_heel = landmarks[29]
         right_heel = landmarks[30]
         left_foot_index = landmarks[31]  # Toe point
         right_foot_index = landmarks[32]
@@ -1078,136 +1078,219 @@ def process_calf_raises(landmarks, state, current_time, rep_cooldown, hold_thres
         angles = {}
         feedback = ""
         
-        # Check if at least one foot is visible with required landmarks
-        left_foot_visible = all(point and all(k in point for k in ['x', 'y']) 
-                              for point in [left_ankle, left_heel, left_foot_index])
+        # Check if both feet are visible
+        feet_visible = all(point and all(k in point for k in ['x', 'y']) 
+                           for point in [left_ankle, right_ankle, left_heel, right_heel, 
+                                        left_foot_index, right_foot_index])
         
-        right_foot_visible = all(point and all(k in point for k in ['x', 'y']) 
-                               for point in [right_ankle, right_heel, right_foot_index])
-        
-        if not (left_foot_visible or right_foot_visible):
+        if not feet_visible:
             return {
                 'repCounter': state['repCounter'],
                 'stage': state['stage'],
-                'feedback': "Position feet in view of camera",
+                'feedback': "Position feet clearly in view of camera",
                 'angles': {}
             }
         
+        # Initialize tracking values if they don't exist
+        if 'prev_left_heel_y' not in state:
+            state['prev_left_heel_y'] = None
+        if 'prev_right_heel_y' not in state:
+            state['prev_right_heel_y'] = None
+        if 'movement_history' not in state:
+            state['movement_history'] = []
+        if 'stable_frames' not in state:
+            state['stable_frames'] = 0
+        
         # Calculate ankle-heel height difference for both feet
-        # This measures how high the heel is lifted relative to the ankle
-        left_heel_lift = 0
-        right_heel_lift = 0
+        left_heel_lift = left_ankle['y'] - left_heel['y']
+        right_heel_lift = right_ankle['y'] - right_heel['y']
         
-        if left_foot_visible:
-            left_heel_lift = left_ankle['y'] - left_heel['y']
-            angles['LHeelLift'] = {
-                'value': left_heel_lift * 100,  # Convert to percentage for display
-                'position': {
-                    'x': left_ankle['x'],
-                    'y': left_ankle['y'] + 0.05  # Position slightly below ankle
-                }
+        angles['LHeelLift'] = {
+            'value': left_heel_lift * 100,  # Convert to percentage for display
+            'position': {
+                'x': left_ankle['x'],
+                'y': left_ankle['y'] + 0.05
             }
+        }
         
-        if right_foot_visible:
-            right_heel_lift = right_ankle['y'] - right_heel['y']
-            angles['RHeelLift'] = {
-                'value': right_heel_lift * 100,  # Convert to percentage for display
-                'position': {
-                    'x': right_ankle['x'],
-                    'y': right_ankle['y'] + 0.05  # Position slightly below ankle
-                }
+        angles['RHeelLift'] = {
+            'value': right_heel_lift * 100,
+            'position': {
+                'x': right_ankle['x'],
+                'y': right_ankle['y'] + 0.05
             }
+        }
             
         # Calculate ankle-to-toe angle (foot extension)
-        left_foot_angle = None
-        right_foot_angle = None
+        left_foot_angle = calculate_angle(left_heel, left_ankle, left_foot_index)
+        right_foot_angle = calculate_angle(right_heel, right_ankle, right_foot_index)
         
-        if left_foot_visible:
-            left_foot_angle = calculate_angle(left_heel, left_ankle, left_foot_index)
-            angles['LFootAngle'] = {
-                'value': left_foot_angle,
+        angles['LFootAngle'] = {
+            'value': left_foot_angle,
+            'position': {
+                'x': left_ankle['x'] - 0.05,
+                'y': left_ankle['y']
+            }
+        }
+            
+        angles['RFootAngle'] = {
+            'value': right_foot_angle,
+            'position': {
+                'x': right_ankle['x'] + 0.05,
+                'y': right_ankle['y']
+            }
+        }
+        
+        # Calculate average values
+        avg_heel_lift = (left_heel_lift + right_heel_lift) / 2
+        avg_foot_angle = (left_foot_angle + right_foot_angle) / 2
+            
+        angles['AvgLift'] = {
+            'value': avg_heel_lift * 100,
+            'position': {
+                'x': (left_ankle['x'] + right_ankle['x']) / 2,
+                'y': (left_ankle['y'] + right_ankle['y']) / 2 + 0.1
+            }
+        }
+        
+        angles['AvgFootAngle'] = {
+            'value': avg_foot_angle,
+            'position': {
+                'x': (left_ankle['x'] + right_ankle['x']) / 2,
+                'y': (left_ankle['y'] + right_ankle['y']) / 2 - 0.05
+            }
+        }
+        
+        # Track movement of heels
+        left_heel_movement = 0
+        right_heel_movement = 0
+        
+        if state['prev_left_heel_y'] is not None:
+            left_heel_movement = state['prev_left_heel_y'] - left_heel['y']  # Positive when heel rises
+            angles['LHeelMove'] = {
+                'value': left_heel_movement * 100,
                 'position': {
-                    'x': left_ankle['x'] - 0.05,  # Position slightly to the left of ankle
-                    'y': left_ankle['y']
+                    'x': left_heel['x'] - 0.1,
+                    'y': left_heel['y']
                 }
             }
-            
-        if right_foot_visible:
-            right_foot_angle = calculate_angle(right_heel, right_ankle, right_foot_index)
-            angles['RFootAngle'] = {
-                'value': right_foot_angle,
+        
+        if state['prev_right_heel_y'] is not None:
+            right_heel_movement = state['prev_right_heel_y'] - right_heel['y']
+            angles['RHeelMove'] = {
+                'value': right_heel_movement * 100,
                 'position': {
-                    'x': right_ankle['x'] + 0.05,  # Position slightly to the right of ankle
-                    'y': right_ankle['y']
+                    'x': right_heel['x'] + 0.1,
+                    'y': right_heel['y']
                 }
             }
         
-        # Calculate average calf raise height and foot angle
-        avg_heel_lift = 0
-        if left_heel_lift > 0 and right_heel_lift > 0:
-            avg_heel_lift = (left_heel_lift + right_heel_lift) / 2
-        elif left_heel_lift > 0:
-            avg_heel_lift = left_heel_lift
-        elif right_heel_lift > 0:
-            avg_heel_lift = right_heel_lift
-            
-        avg_foot_angle = 0
-        if left_foot_angle is not None and right_foot_angle is not None:
-            avg_foot_angle = (left_foot_angle + right_foot_angle) / 2
-        elif left_foot_angle is not None:
-            avg_foot_angle = left_foot_angle
-        elif right_foot_angle is not None:
-            avg_foot_angle = right_foot_angle
-            
-        # Add average metrics to display data
-        if avg_heel_lift > 0:
-            angles['AvgLift'] = {
-                'value': avg_heel_lift * 100,  # Convert to percentage
-                'position': {
-                    'x': (left_ankle['x'] + right_ankle['x']) / 2 if right_foot_visible and left_foot_visible else 
-                         (left_ankle['x'] if left_foot_visible else right_ankle['x']),
-                    'y': (left_ankle['y'] + right_ankle['y']) / 2 if right_foot_visible and left_foot_visible else 
-                         (left_ankle['y'] if left_foot_visible else right_ankle['y']) + 0.1
-                }
-            }
+        # Store movement data in history (keep last 5 frames)
+        movement_data = {
+            'left_heel': left_heel_movement,
+            'right_heel': right_heel_movement,
+            'left_lift': left_heel_lift,
+            'right_lift': right_heel_lift,
+            'time': current_time
+        }
+        state['movement_history'].append(movement_data)
+        if len(state['movement_history']) > 5:
+            state['movement_history'].pop(0)
         
-        # MODIFIED DETECTION LOGIC: More lenient requirements
+        # Calculate average movement over the last few frames
+        left_avg_movement = 0
+        right_avg_movement = 0
+        count = 0
         
-        # Define the stages with more lenient thresholds
-        # "down" = feet mostly flat, "up" = heels raised
-        
-        # MODIFIED: Less strict requirement for flat feet (down position)
-        # Allow for slight heel elevation in the starting position
-        if avg_heel_lift < 0.015:  # Small threshold for heel raise (was 0.01)
-            # If we were in the up position, complete the rep cycle
-            if state['stage'] == "up":
-                state['stage'] = "down"
-                feedback = "Good! Ready for next rep"
-            else:
-                state['stage'] = "down"
-                feedback = "Starting position - feet flat"
+        for data in state['movement_history']:
+            if data['left_heel'] != 0:  # Only count non-zero movements
+                left_avg_movement += data['left_heel']
+                count += 1
+            if data['right_heel'] != 0:
+                right_avg_movement += data['right_heel']
+                count += 1
                 
-            state['holdStart'] = current_time
+        if count > 0:
+            left_avg_movement /= count
+            right_avg_movement /= count
+            
+        # Detect significant movement
+        significant_movement = False
+        moving_up = False
+        moving_down = False
         
-        # MODIFIED: Less strict requirement for raised position (up position)
-        # Any noticeable heel raise is accepted
-        heel_raised = avg_heel_lift > 0.015  # Lower threshold for heel raise detection (was 0.02)
+        # Check if consistent upward or downward movement
+        if (left_avg_movement > 0.01 or right_avg_movement > 0.01):
+            moving_up = True
+            significant_movement = True
+        elif (left_avg_movement < -0.01 or right_avg_movement < -0.01):
+            moving_down = True
+            significant_movement = True
+            
+        # Check stability (minimal movement)
+        is_stable = (abs(left_avg_movement) < 0.003 and abs(right_avg_movement) < 0.003)
+        if is_stable:
+            state['stable_frames'] += 1
+        else:
+            state['stable_frames'] = 0
+            
+        # Updated position definition with better thresholds
+        raised_position = avg_heel_lift > 0.03 and avg_foot_angle < 85  # Heels clearly raised and proper foot angle
+        lowered_position = avg_heel_lift < 0.01  # Heels close to flat
         
-        # Completely remove the foot angle requirement for counting reps
-        if heel_raised and state['stage'] == "down":
+        # Check if knees are stable (should not move much in calf raises)
+        knee_stable = True
+        if all(k in left_knee for k in ['x', 'y']) and all(k in right_knee for k in ['x', 'y']):
+            knee_vertical_diff = abs(left_knee['y'] - right_knee['y'])
+            if knee_vertical_diff > 0.05:
+                knee_stable = False
+                
+        # STATE MACHINE WITH ENHANCED LOGIC
+        if raised_position and state['stage'] == "down" and moving_up and significant_movement:
+            # Transition from down to up with clear upward movement
             if current_time - state['lastRepTime'] > rep_cooldown:
                 state['stage'] = "up"
                 state['repCounter'] += 1
                 state['lastRepTime'] = current_time
-                feedback = "Rep counted! Good raise."
-            else:
-                feedback = "Slow down slightly"
                 
-        # Form feedback
-        if state['stage'] == "up" and not feedback:
-            feedback = "Lower heels to floor for next rep"
-        elif state['stage'] == "down" and heel_raised and not feedback:
-            feedback = "Keep raising"
+                if not knee_stable:
+                    feedback = "Rep counted! Keep knees steady."
+                else:
+                    feedback = "Good rep! Nice height."
+            else:
+                feedback = "Slow down between reps"
+                
+        elif lowered_position and state['stage'] == "up" and moving_down and significant_movement:
+            # Transition from up to down with clear downward movement
+            state['stage'] = "down"
+            feedback = "Good return. Ready for next rep."
+            
+        elif raised_position and state['stage'] == "up":
+            # Maintaining raised position
+            feedback = "Lower heels completely for next rep"
+            
+        elif lowered_position and state['stage'] == "down":
+            # Maintaining lowered position
+            feedback = "Rise up on the balls of your feet"
+            
+        elif moving_up and state['stage'] == "down":
+            # In the process of raising
+            feedback = "Keep rising"
+            
+        elif moving_down and state['stage'] == "up":
+            # In the process of lowering
+            feedback = "Lower heels completely"
+            
+        else:
+            # Default feedback
+            if state['stage'] == "up":
+                feedback = "Lower heels to floor"
+            else:
+                feedback = "Rise up on toes"
+                
+        # Store current positions for next frame
+        state['prev_left_heel_y'] = left_heel['y']
+        state['prev_right_heel_y'] = right_heel['y']
             
         return {
             'repCounter': state['repCounter'],
