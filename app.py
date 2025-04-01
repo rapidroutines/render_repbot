@@ -795,7 +795,7 @@ def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_
         }
 
 def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for lunge exercise with improved detection and no hold requirement"""
+    """Process landmarks for lunge exercise with stricter movement verification"""
     try:
         # Get landmarks for both sides of the body
         left_hip = landmarks[23]
@@ -857,28 +857,32 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
         if left_leg_visible and right_leg_visible:
             knee_height_diff = abs(left_knee['y'] - right_knee['y'])
             angles['KneeDiff'] = {
-                'value': knee_height_diff * 100,  # Convert to percentage for display
+                'value': knee_height_diff * 100,
                 'position': {
                     'x': (left_knee['x'] + right_knee['x']) / 2,
                     'y': (left_knee['y'] + right_knee['y']) / 2
                 }
             }
 
-        # Add position tracking to detect movement (similar to shoulder press)
+        # IMPROVED POSITION TRACKING
+        # Initialize tracking values if they don't exist
         if 'prev_left_knee_y' not in state:
             state['prev_left_knee_y'] = None
         if 'prev_right_knee_y' not in state:
             state['prev_right_knee_y'] = None
-
-        # Track vertical movement of knees
-        left_knee_moving_down = False
-        right_knee_moving_down = False
+        if 'movement_history' not in state:
+            state['movement_history'] = []
+        if 'angle_history' not in state:
+            state['angle_history'] = []
+        
+        # RECORD MOVEMENT DATA
+        # Track knee positions and movements
+        left_knee_movement = 0
+        right_knee_movement = 0
         
         if left_leg_visible and state['prev_left_knee_y'] is not None:
-            left_knee_moving_down = left_knee['y'] > state['prev_left_knee_y'] 
-            # In image coordinates, y increases downward
-            left_knee_movement = abs(left_knee['y'] - state['prev_left_knee_y'])
-            angles['LKneeMoving'] = {
+            left_knee_movement = left_knee['y'] - state['prev_left_knee_y']
+            angles['LKneeMove'] = {
                 'value': left_knee_movement * 100,
                 'position': {
                     'x': left_knee['x'] - 0.1,
@@ -887,39 +891,98 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
             }
         
         if right_leg_visible and state['prev_right_knee_y'] is not None:
-            right_knee_moving_down = right_knee['y'] > state['prev_right_knee_y']
-            # In image coordinates, y increases downward
-            right_knee_movement = abs(right_knee['y'] - state['prev_right_knee_y'])
-            angles['RKneeMoving'] = {
+            right_knee_movement = right_knee['y'] - state['prev_right_knee_y']
+            angles['RKneeMove'] = {
                 'value': right_knee_movement * 100,
                 'position': {
                     'x': right_knee['x'] + 0.1,
                     'y': right_knee['y']
                 }
             }
+        
+        # Store movement data in history (keep last 5 frames)
+        movement_data = {
+            'left': left_knee_movement,
+            'right': right_knee_movement,
+            'time': current_time
+        }
+        state['movement_history'].append(movement_data)
+        if len(state['movement_history']) > 5:
+            state['movement_history'].pop(0)
             
-        # Detect significant knee movement (going into lunge position)
+        # Store angle data in history (keep last 5 frames)
+        angle_data = {
+            'left': left_leg_angle,
+            'right': right_leg_angle,
+            'time': current_time
+        }
+        state['angle_history'].append(angle_data)
+        if len(state['angle_history']) > 5:
+            state['angle_history'].pop(0)
+            
+        # VERIFY SUSTAINED MOVEMENT
+        # Calculate average movement over the last few frames to detect real movement vs jitter
+        left_avg_movement = 0
+        right_avg_movement = 0
+        movement_count = 0
+        
+        for data in state['movement_history']:
+            if data['left'] is not None:
+                left_avg_movement += data['left']
+                movement_count += 1
+            if data['right'] is not None:
+                right_avg_movement += data['right']
+                movement_count += 1
+                
+        if movement_count > 0:
+            left_avg_movement /= movement_count
+            right_avg_movement /= movement_count
+            
+        # VERIFY SIGNIFICANT ANGLE CHANGE
+        # Calculate how much the leg angles have changed recently
+        left_angle_change = 0
+        right_angle_change = 0
+        
+        if len(state['angle_history']) >= 2:
+            latest = state['angle_history'][-1]
+            previous = state['angle_history'][0]
+            
+            if latest['left'] is not None and previous['left'] is not None:
+                left_angle_change = abs(latest['left'] - previous['left'])
+                
+            if latest['right'] is not None and previous['right'] is not None:
+                right_angle_change = abs(latest['right'] - previous['right'])
+        
+        # DETERMINE IF ACTUAL EXERCISE MOVEMENT IS HAPPENING
+        # We consider it significant movement if:
+        # 1. There's consistent movement trend in knee position over multiple frames
+        # 2. There's significant change in knee angles
         significant_movement = False
-        if (left_leg_visible and state['prev_left_knee_y'] is not None and 
-            abs(left_knee['y'] - state['prev_left_knee_y']) > 0.01):
+        significant_angle_change = (left_angle_change > 20 or right_angle_change > 20)
+        consistent_movement = (abs(left_avg_movement) > 0.01 or abs(right_avg_movement) > 0.01)
+        
+        if significant_angle_change and consistent_movement:
             significant_movement = True
-        if (right_leg_visible and state['prev_right_knee_y'] is not None and 
-            abs(right_knee['y'] - state['prev_right_knee_y']) > 0.01):
-            significant_movement = True
-
+            angles['SignificantMove'] = {
+                'value': 1,
+                'position': {
+                    'x': 0.1,
+                    'y': 0.1
+                }
+            }
+        
         # Store current positions for next frame comparison
         if left_leg_visible:
             state['prev_left_knee_y'] = left_knee['y']
         if right_leg_visible:
             state['prev_right_knee_y'] = right_knee['y']
 
-        # Define the positions with more lenient thresholds
-        
+        # POSITION DETECTION
         # Standing position - both legs relatively straight
         standing_detected = False
         if left_leg_visible and right_leg_visible:
             # Both legs visible - check if both are straight-ish
-            standing_detected = (left_leg_angle > 150 and right_leg_angle > 150 and knee_height_diff < 0.12)
+            standing_detected = (left_leg_angle > 150 and right_leg_angle > 150 and knee_height_diff < 0.15)
         elif left_leg_visible and left_leg_angle > 150:
             # Only left leg visible and it's straight
             standing_detected = True
@@ -932,7 +995,7 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
         
         # Check for lunge position with more lenient criteria
         if left_leg_visible and right_leg_visible:
-            # One leg is sufficiently bent OR knees have significant height difference
+            # One leg is sufficiently bent AND knees have height difference
             lunge_detected = ((left_leg_angle < 140 or right_leg_angle < 140) and knee_height_diff > 0.1)
         elif left_leg_visible and left_leg_angle < 140:
             # Only left leg visible and it's bent
@@ -941,23 +1004,28 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
             # Only right leg visible and it's bent
             lunge_detected = True
 
-        # IMPROVED STATE TRANSITIONS (similar to shoulder press)
+        # STATE TRANSITIONS WITH STRICTER VERIFICATION
         feedback = ""
         
         # Handle standing position detection (up position)
         if standing_detected:
             if state['stage'] == "down":
-                # Transition from lunge to standing - complete the rep cycle
-                state['stage'] = "up"
-                feedback = "Ready for next lunge"
+                # Only transition if we see significant movement
+                if significant_movement:
+                    state['stage'] = "up"
+                    feedback = "Ready for next lunge"
+                else:
+                    # Not enough movement to confirm transition
+                    feedback = "Return to standing position"
             elif state['stage'] == "up":
-                # Already in standing position
                 feedback = "Standing position"
 
         # Handle lunge position detection (down position)
         if lunge_detected:
-            # Only count a rep when transitioning from standing to lunge
-            # AND there's significant movement (to prevent false positives)
+            # STRICTER REP COUNTING: Only count when:
+            # 1. We're in standing position
+            # 2. There's significant movement AND angle change
+            # 3. Cooldown has passed
             if state['stage'] == "up" and significant_movement:
                 if current_time - state['lastRepTime'] > rep_cooldown:
                     state['stage'] = "down"
