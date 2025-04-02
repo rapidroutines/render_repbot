@@ -703,7 +703,7 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
         }
 
 def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for floor tricep extension exercise"""
+    """Process landmarks for floor tricep extension exercise with single-arm support"""
     try:
         # Left arm
         left_shoulder = landmarks[11]
@@ -722,9 +722,22 @@ def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_
         right_extension_detected = False
         angles = {}
         feedback = ""
+        
+        # Check visibility of arms
+        left_arm_visible = all(k in left_shoulder for k in ['x', 'y']) and all(k in left_elbow for k in ['x', 'y']) and all(k in left_wrist for k in ['x', 'y'])
+        right_arm_visible = all(k in right_shoulder for k in ['x', 'y']) and all(k in right_elbow for k in ['x', 'y']) and all(k in right_wrist for k in ['x', 'y'])
+        
+        # If neither arm is visible, provide feedback
+        if not (left_arm_visible or right_arm_visible):
+            return {
+                'repCounter': state['repCounter'],
+                'stage': state['stage'],
+                'feedback': "Cannot see arms clearly - adjust camera angle",
+                'angles': angles
+            }
 
-        # Calculate and store left arm angle
-        if all(k in left_shoulder for k in ['x', 'y']) and all(k in left_elbow for k in ['x', 'y']) and all(k in left_wrist for k in ['x', 'y']):
+        # Calculate and store left arm angle if visible
+        if left_arm_visible:
             left_angle = calculate_angle(left_shoulder, left_elbow, left_wrist)
             # Store angle with position data
             angles['L'] = {
@@ -744,8 +757,8 @@ def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_
                     left_extension_detected = True
                     state['leftArmStage'] = "up"
 
-        # Calculate and store right arm angle
-        if all(k in right_shoulder for k in ['x', 'y']) and all(k in right_elbow for k in ['x', 'y']) and all(k in right_wrist for k in ['x', 'y']):
+        # Calculate and store right arm angle if visible
+        if right_arm_visible:
             right_angle = calculate_angle(right_shoulder, right_elbow, right_wrist)
             # Store angle with position data
             angles['R'] = {
@@ -765,21 +778,40 @@ def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_
                     right_extension_detected = True
                     state['rightArmStage'] = "up"
 
-        # Count rep only if both arms complete an extension and enough time has passed since last rep
-        if (left_extension_detected and right_extension_detected) and current_time - state['lastRepTime'] > rep_cooldown:
-            state['repCounter'] += 1
-            state['lastRepTime'] = current_time
-            feedback = "Good rep! Both arms extended."
-        else:
-            # Simple feedback
-            if left_extension_detected and not right_extension_detected:
+        # MODIFIED: Count rep based on visible arms
+        extension_detected = False
+        if left_arm_visible and right_arm_visible:
+            # Both arms visible - require both to extend
+            extension_detected = left_extension_detected and right_extension_detected
+            if extension_detected:
+                feedback = "Good rep! Both arms extended."
+            elif left_extension_detected and not right_extension_detected:
                 feedback = "Extend your right arm too"
             elif not left_extension_detected and right_extension_detected:
                 feedback = "Extend your left arm too"
+        elif left_arm_visible:
+            # Only left arm visible - only require left arm to extend
+            extension_detected = left_extension_detected
+            if extension_detected:
+                feedback = "Left arm rep detected."
+            else:
+                feedback = "Extend your left arm fully"
+        elif right_arm_visible:
+            # Only right arm visible - only require right arm to extend
+            extension_detected = right_extension_detected
+            if extension_detected:
+                feedback = "Right arm rep detected."
+            else:
+                feedback = "Extend your right arm fully"
+                
+        # Count the rep if extension detected and cooldown passed
+        if extension_detected and current_time - state['lastRepTime'] > rep_cooldown:
+            state['repCounter'] += 1
+            state['lastRepTime'] = current_time
 
         return {
             'repCounter': state['repCounter'],
-            'stage': 'up' if (left_extension_detected and right_extension_detected) else 'down',
+            'stage': 'up' if extension_detected else 'down',
             'feedback': feedback,
             'angles': angles
         }
