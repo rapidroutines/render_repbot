@@ -702,7 +702,7 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
             'feedback': f"Error: {str(e)}"
         }
 
- def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_threshold):
+def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_threshold):
     """Process landmarks for tricep extension exercise similar to bicep curl logic"""
     try:
         # Left arm
