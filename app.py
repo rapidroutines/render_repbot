@@ -703,7 +703,7 @@ def process_shoulder_press(landmarks, state, current_time, rep_cooldown, hold_th
         }
 
 def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for tricep extension exercise similar to bicep curl logic"""
+    """Process landmarks for tricep extension exercise with improved visibility checks"""
     try:
         # Left arm
         left_shoulder = landmarks[11]
@@ -721,9 +721,34 @@ def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_
         left_extension_detected = False
         right_extension_detected = False
         angles = {}
+        
+        # Check for visibility of arm parts
+        left_arm_visible = (all(k in left_shoulder for k in ['x', 'y', 'visibility']) and 
+                           all(k in left_elbow for k in ['x', 'y', 'visibility']) and 
+                           all(k in left_wrist for k in ['x', 'y', 'visibility']) and
+                           left_shoulder.get('visibility', 0) > 0.5 and 
+                           left_elbow.get('visibility', 0) > 0.5 and 
+                           left_wrist.get('visibility', 0) > 0.5)
+        
+        right_arm_visible = (all(k in right_shoulder for k in ['x', 'y', 'visibility']) and 
+                            all(k in right_elbow for k in ['x', 'y', 'visibility']) and 
+                            all(k in right_wrist for k in ['x', 'y', 'visibility']) and
+                            right_shoulder.get('visibility', 0) > 0.5 and 
+                            right_elbow.get('visibility', 0) > 0.5 and 
+                            right_wrist.get('visibility', 0) > 0.5)
+        
+        # If no arms are clearly visible, return early with visibility warning
+        if not (left_arm_visible or right_arm_visible):
+            return {
+                'repCounter': state['repCounter'],
+                'stage': state.get('stage', 'down'),
+                'feedback': "Arms not clearly visible. Adjust position or camera.",
+                'angles': angles,
+                'visibility': False
+            }
 
-        # Calculate and store left arm angle
-        if all(k in left_shoulder for k in ['x', 'y']) and all(k in left_elbow for k in ['x', 'y']) and all(k in left_wrist for k in ['x', 'y']):
+        # Calculate and store left arm angle if visible
+        if left_arm_visible:
             left_angle = calculate_angle(left_shoulder, left_elbow, left_wrist)
             # Store angle with position data
             angles['L'] = {
@@ -744,8 +769,8 @@ def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_
                     left_extension_detected = True
                     state['leftArmStage'] = "up"
 
-        # Calculate and store right arm angle
-        if all(k in right_shoulder for k in ['x', 'y']) and all(k in right_elbow for k in ['x', 'y']) and all(k in right_wrist for k in ['x', 'y']):
+        # Calculate and store right arm angle if visible
+        if right_arm_visible:
             right_angle = calculate_angle(right_shoulder, right_elbow, right_wrist)
             # Store angle with position data
             angles['R'] = {
@@ -784,21 +809,53 @@ def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_
                 'repCounter': state['repCounter'],
                 'stage': 'up' if left_extension_detected or right_extension_detected else 'down',
                 'feedback': feedback,
-                'angles': angles
+                'angles': angles,
+                'visibility': True
             }
+
+        # If we've reached here, determine the current stage
+        current_stage = 'down'
+        if left_arm_visible and state.get('leftArmStage') == 'up':
+            current_stage = 'up'
+        elif right_arm_visible and state.get('rightArmStage') == 'up':
+            current_stage = 'up'
+        
+        # Generate appropriate feedback based on visibility and position
+        feedback = ""
+        if left_arm_visible and right_arm_visible:
+            feedback = "Both arms visible. "
+            if current_stage == 'down':
+                feedback += "Extend arms to complete the rep."
+            else:
+                feedback += "Bend arms to prepare for next rep."
+        elif left_arm_visible:
+            feedback = "Left arm visible. "
+            if current_stage == 'down':
+                feedback += "Extend arm to complete the rep."
+            else:
+                feedback += "Bend arm to prepare for next rep."
+        elif right_arm_visible:
+            feedback = "Right arm visible. "
+            if current_stage == 'down':
+                feedback += "Extend arm to complete the rep."
+            else:
+                feedback += "Bend arm to prepare for next rep."
 
         return {
             'repCounter': state['repCounter'],
-            'stage': state['leftArmStage'] if left_extension_detected else state['rightArmStage'],
-            'angles': angles
+            'stage': current_stage,
+            'feedback': feedback,
+            'angles': angles,
+            'visibility': True
         }
         
     except Exception as e:
         print(f"Error in tricep extension detection: {str(e)}")
         return {
             'repCounter': state['repCounter'],
-            'stage': state['stage'],
-            'feedback': f"Error: {str(e)}"
+            'stage': state.get('stage', 'down'),
+            'feedback': f"Error: {str(e)}",
+            'visibility': False
         }
 
 def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
