@@ -34,6 +34,9 @@ class ExerciseCounter {
         // Key points for movement detection (optimization)
         this.keyPoints = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]; // Head, shoulders, arms, hips, legs
 
+        // Dashboard URL - direct external link
+        this.dashboardUrl = "https://www.rapidroutines-dashboard.org/";
+
         // Setup canvas size responsively
         this.resize_canvas();
         window.addEventListener('resize', this.resize_canvas.bind(this));
@@ -391,7 +394,8 @@ class ExerciseCounter {
             
             if (secondsLeft <= 0) {
                 clearInterval(countdownInterval);
-                window.location.href = "https://www.rapidroutines-dashboard.org/";
+                // Redirect to external URL
+                window.location.href = this.dashboardUrl;
             }
         }, 1000);
     }
