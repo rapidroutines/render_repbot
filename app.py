@@ -715,75 +715,12 @@ def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_
         right_elbow = landmarks[14]
         right_wrist = landmarks[16]
 
-        # Get more body points for position verification
-        nose = landmarks[0]
-        left_hip = landmarks[23]
-        right_hip = landmarks[24]
-
         # Track state for both arms
         left_angle = None
         right_angle = None
         left_extension_detected = False
         right_extension_detected = False
         angles = {}
-        feedback = ""
-        
-        # Check if person is in proper position for tricep extensions
-        # For tricep extensions, we need to verify:
-        # 1. Arms are behind the body
-        # 2. Person is in upright position
-        
-        correct_position = False
-        
-        # Check if arms are behind the body by comparing elbow and shoulder x positions
-        left_arm_behind = False
-        right_arm_behind = False
-        
-        if all(k in left_shoulder for k in ['x', 'y']) and all(k in left_elbow for k in ['x', 'y']):
-            left_arm_behind = left_elbow['x'] > left_shoulder['x']
-            angles['LBehind'] = {
-                'value': 1 if left_arm_behind else 0,
-                'position': {
-                    'x': left_shoulder['x'],
-                    'y': left_shoulder['y'] - 0.05
-                }
-            }
-            
-        if all(k in right_shoulder for k in ['x', 'y']) and all(k in right_elbow for k in ['x', 'y']):
-            right_arm_behind = right_elbow['x'] < right_shoulder['x']
-            angles['RBehind'] = {
-                'value': 1 if right_arm_behind else 0,
-                'position': {
-                    'x': right_shoulder['x'],
-                    'y': right_shoulder['y'] - 0.05
-                }
-            }
-        
-        # Check upright position by comparing nose and hip y coordinates
-        upright_position = False
-        if all(k in nose for k in ['x', 'y']) and all(k in left_hip for k in ['x', 'y']) and all(k in right_hip for k in ['x', 'y']):
-            hip_mid_y = (left_hip['y'] + right_hip['y']) / 2
-            upright_position = nose['y'] < hip_mid_y
-            angles['Upright'] = {
-                'value': 1 if upright_position else 0,
-                'position': {
-                    'x': nose['x'],
-                    'y': nose['y'] - 0.05
-                }
-            }
-        
-        # Determine if in proper position - at least one arm behind body and upright
-        correct_position = (left_arm_behind or right_arm_behind) and upright_position
-        
-        if not correct_position:
-            feedback = "Position arms behind body and stand upright"
-            return {
-                'repCounter': state['repCounter'],
-                'stage': state['stage'],
-                'feedback': feedback,
-                'angles': angles,
-                'correctPosition': False
-            }
 
         # Calculate and store left arm angle
         if all(k in left_shoulder for k in ['x', 'y']) and all(k in left_elbow for k in ['x', 'y']) and all(k in left_wrist for k in ['x', 'y']):
@@ -829,8 +766,8 @@ def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_
                     right_extension_detected = True
                     state['rightArmStage'] = "up"
 
-        # Count rep if person is in correct position, arm(s) complete an extension, and enough time has passed
-        if correct_position and (left_extension_detected or right_extension_detected) and current_time - state['lastRepTime'] > rep_cooldown:
+        # Count rep if either arm completes an extension and enough time has passed since last rep
+        if (left_extension_detected or right_extension_detected) and current_time - state['lastRepTime'] > rep_cooldown:
             state['repCounter'] += 1
             state['lastRepTime'] = current_time
             
@@ -847,23 +784,13 @@ def process_tricep_extension(landmarks, state, current_time, rep_cooldown, hold_
                 'repCounter': state['repCounter'],
                 'stage': 'up' if left_extension_detected or right_extension_detected else 'down',
                 'feedback': feedback,
-                'angles': angles,
-                'correctPosition': correct_position
+                'angles': angles
             }
-
-        # Default feedback if no rep was counted
-        if not feedback:
-            if state['leftArmStage'] == "down" and state['rightArmStage'] == "down":
-                feedback = "Extend your arms"
-            else:
-                feedback = "Return arms to starting position"
 
         return {
             'repCounter': state['repCounter'],
             'stage': state['leftArmStage'] if left_extension_detected else state['rightArmStage'],
-            'feedback': feedback,
-            'angles': angles,
-            'correctPosition': correct_position
+            'angles': angles
         }
         
     except Exception as e:
