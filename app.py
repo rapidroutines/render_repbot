@@ -81,6 +81,8 @@ def process_landmarks():
             result = process_tricep_extension(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
         elif exercise_type == 'lunge':
             result = process_lunge(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
+        elif exercise_type == 'russianTwist':
+            result = process_russian_twist(landmarks, client_state, current_time, rep_cooldown, hold_threshold)
         
         # Update client state with the new values
         exercise_states[client_key] = client_state
@@ -1125,6 +1127,153 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
         }
 
 
+def process_russian_twist(landmarks, state, current_time, rep_cooldown, hold_threshold):
+    """Process landmarks for Russian Twist exercise"""
+    try:
+        # Get landmarks for shoulders, hips, and head
+        left_shoulder = landmarks[11]
+        right_shoulder = landmarks[12]
+        left_hip = landmarks[23]
+        right_hip = landmarks[24]
+        nose = landmarks[0]
+        
+        # Also track hands/wrists for more precise twist detection
+        left_wrist = landmarks[15]
+        right_wrist = landmarks[16]
+        
+        # Initialize variables
+        angles = {}
+        feedback = ""
+        
+        # Calculate torso midpoints
+        shoulder_midpoint = {
+            'x': (left_shoulder['x'] + right_shoulder['x']) / 2,
+            'y': (left_shoulder['y'] + right_shoulder['y']) / 2
+        }
+        
+        hip_midpoint = {
+            'x': (left_hip['x'] + right_hip['x']) / 2,
+            'y': (left_hip['y'] + right_hip['y']) / 2
+        }
+        
+        # Calculate torso vector (from hips to shoulders)
+        torso_vector = {
+            'x': shoulder_midpoint['x'] - hip_midpoint['x'],
+            'y': shoulder_midpoint['y'] - hip_midpoint['y']
+        }
+        
+        # Calculate twist angle (using horizontal line as reference)
+        horizontal_vector = {'x': 1, 'y': 0}
+        
+        # Use dot product to find angle
+        dot_product = torso_vector['x'] * horizontal_vector['x']
+        torso_magnitude = math.sqrt(torso_vector['x']**2 + torso_vector['y']**2)
+        
+        if torso_magnitude == 0:
+            twist_angle = 0
+        else:
+            twist_angle = math.acos(dot_product / torso_magnitude) * (180 / math.pi)
+            
+            # Determine the direction of twist
+            if torso_vector['y'] < 0:
+                twist_angle = 360 - twist_angle
+        
+        # Store angle with position data
+        angles['Twist'] = {
+            'value': twist_angle,
+            'position': {
+                'x': shoulder_midpoint['x'],
+                'y': shoulder_midpoint['y'] - 0.05
+            }
+        }
+        
+        # Add tracking for direction changes if not exists
+        if 'twist_direction' not in state:
+            state['twist_direction'] = 'center'
+        if 'left_count' not in state:
+            state['left_count'] = 0
+        if 'right_count' not in state:
+            state['right_count'] = 0
+        if 'prev_angle' not in state:
+            state['prev_angle'] = twist_angle
+        
+        # Detect left and right twists
+        # Set thresholds for twist detection
+        left_threshold = 70   # Angle for left twist
+        right_threshold = 110  # Angle for right twist
+        min_twist_change = 20 # Minimum change required to count as a new twist
+        
+        # Simplified twist detection logic
+        # If we were in center position and now twisted left
+        if state['twist_direction'] == 'center' and twist_angle < left_threshold:
+            state['twist_direction'] = 'left'
+            feedback = "Twisting left"
+            
+        # If we were in center position and now twisted right
+        elif state['twist_direction'] == 'center' and twist_angle > right_threshold:
+            state['twist_direction'] = 'right'
+            feedback = "Twisting right"
+            
+        # If we were twisted left and now center/right
+        elif state['twist_direction'] == 'left' and twist_angle > left_threshold + 10:
+            state['twist_direction'] = 'center'
+            state['left_count'] += 1
+            feedback = "Left twist completed"
+            
+        # If we were twisted right and now center/left
+        elif state['twist_direction'] == 'right' and twist_angle < right_threshold - 10:
+            state['twist_direction'] = 'center'
+            state['right_count'] += 1
+            feedback = "Right twist completed"
+        
+        # Count a rep when we complete both left and right twists
+        if state['left_count'] > 0 and state['right_count'] > 0:
+            # We count a rep when we've done both a left and right twist
+            min_count = min(state['left_count'], state['right_count'])
+            
+            if min_count > state['repCounter']:
+                # If this is a new rep, increment counter
+                if current_time - state['lastRepTime'] > rep_cooldown:
+                    new_reps = min_count - state['repCounter']
+                    state['repCounter'] = min_count
+                    state['lastRepTime'] = current_time
+                    feedback = f"Rep {state['repCounter']} complete! Keep twisting!"
+        
+        # Store current angle for next comparison
+        state['prev_angle'] = twist_angle
+        
+        # Add visible counters
+        angles['LeftTwists'] = {
+            'value': state['left_count'],
+            'position': {
+                'x': left_shoulder['x'] - 0.1,
+                'y': left_shoulder['y'] - 0.1
+            }
+        }
+        
+        angles['RightTwists'] = {
+            'value': state['right_count'],
+            'position': {
+                'x': right_shoulder['x'] + 0.1,
+                'y': right_shoulder['y'] - 0.1
+            }
+        }
+        
+        return {
+            'repCounter': state['repCounter'],
+            'stage': state['twist_direction'],
+            'feedback': feedback,
+            'angles': angles
+        }
+        
+    except Exception as e:
+        print(f"Error in Russian Twist detection: {str(e)}")
+        return {
+            'repCounter': state['repCounter'],
+            'stage': state.get('twist_direction', 'center'),
+            'feedback': f"Error: {str(e)}",
+            'angles': {}
+        }
 
 
 
