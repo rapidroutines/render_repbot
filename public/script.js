@@ -353,73 +353,52 @@ class ExerciseCounter {
         }
     }
 
-    // Modified show_redirect_notice method in the ExerciseCounter class
-
-show_redirect_notice() {
-    // Create a notice that will display before redirecting
-    const noticeElement = document.createElement('div');
-    noticeElement.className = 'redirect-notice';
-    noticeElement.innerHTML = `
-        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-                    background: rgba(0, 0, 0, 0.7); z-index: 100; display: flex; 
-                    flex-direction: column; justify-content: center; align-items: center; color: white;">
-            <h2>No activity detected</h2>
-            <p>Redirecting to dashboard in <span id="countdown">5</span> seconds...</p>
-            <button id="stay-button" style="padding: 10px 20px; margin-top: 20px; 
-                                            background: #1e628c; border: none; color: white; 
-                                            border-radius: 5px; cursor: pointer;">
-                Stay on this page
-            </button>
-        </div>
-    `;
-    
-    document.body.appendChild(noticeElement);
-    
-    // Add event listener to the stay button
-    document.getElementById('stay-button').addEventListener('click', () => {
-        // Remove the notice and reset the timer
-        if (noticeElement.parentNode) {
-            noticeElement.parentNode.removeChild(noticeElement);
-        }
-        this.reset_inactivity_timer();
-    });
-    
-    // Start the countdown
-    let secondsLeft = 5;
-    const countdownElement = document.getElementById('countdown');
-    
-    const countdownInterval = setInterval(() => {
-        secondsLeft--;
-        if (countdownElement) {
-            countdownElement.textContent = secondsLeft;
-        }
+    show_redirect_notice() {
+        // Create a notice that will display before redirecting
+        const noticeElement = document.createElement('div');
+        noticeElement.className = 'redirect-notice';
+        noticeElement.innerHTML = `
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                        background: rgba(0, 0, 0, 0.7); z-index: 100; display: flex; 
+                        flex-direction: column; justify-content: center; align-items: center; color: white;">
+                <h2>No activity detected</h2>
+                <p>Redirecting to dashboard in <span id="countdown">5</span> seconds...</p>
+                <button id="stay-button" style="padding: 10px 20px; margin-top: 20px; 
+                                                background: #1e628c; border: none; color: white; 
+                                                border-radius: 5px; cursor: pointer;">
+                    Stay on this page
+                </button>
+            </div>
+        `;
         
-        if (secondsLeft <= 0) {
-            clearInterval(countdownInterval);
-            
-            // FIXED: Use window.parent or window.top to target the main browser window
-            // This will work for iframes embedded in other pages
-            try {
-                // First try to open in parent window (iframe's parent)
-                if (window.parent && window.parent !== window) {
-                    window.parent.location.href = this.dashboardUrl;
-                } 
-                // If that doesn't work, try the top-level window
-                else if (window.top && window.top !== window) {
-                    window.top.location.href = this.dashboardUrl;
-                }
-                // Fallback to opening in a new tab
-                else {
-                    window.open(this.dashboardUrl, '_blank');
-                }
-            } catch (e) {
-                // If accessing parent/top window fails due to cross-origin restrictions,
-                // fallback to opening in a new tab
-                console.error("Could not access parent window. Opening in new tab.", e);
-                window.open(this.dashboardUrl, '_blank');
+        document.body.appendChild(noticeElement);
+        
+        // Add event listener to the stay button
+        document.getElementById('stay-button').addEventListener('click', () => {
+            // Remove the notice and reset the timer
+            if (noticeElement.parentNode) {
+                noticeElement.parentNode.removeChild(noticeElement);
             }
-        }
-    }, 1000);
+            this.reset_inactivity_timer();
+        });
+        
+        // Start the countdown
+        let secondsLeft = 5;
+        const countdownElement = document.getElementById('countdown');
+        
+        const countdownInterval = setInterval(() => {
+            secondsLeft--;
+            if (countdownElement) {
+                countdownElement.textContent = secondsLeft;
+            }
+            
+            if (secondsLeft <= 0) {
+                clearInterval(countdownInterval);
+                // Redirect to external URL
+                window.location.href = this.dashboardUrl;
+            }
+        }, 1000);
+    }
 }
 
 // Initialize when page loads
