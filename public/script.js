@@ -348,7 +348,7 @@ class ExerciseCounter {
         
         // If inactive for longer than timeout, redirect
         if (inactiveTime >= this.inactivityTimeout) {
-            console.log("User inactive, redirecting to dashboard...");
+            console.log("User inactive, redirecting to RepBot Start Screen...");
             this.show_redirect_notice();
         }
     }
@@ -362,7 +362,7 @@ class ExerciseCounter {
                         background: rgba(0, 0, 0, 0.7); z-index: 100; display: flex; 
                         flex-direction: column; justify-content: center; align-items: center; color: white;">
                 <h2>No activity detected</h2>
-                <p>Redirecting to dashboard in <span id="countdown">5</span> seconds...</p>
+                <p>Redirecting to RepBot Start Screen in <span id="countdown">5</span> seconds...</p>
                 <button id="stay-button" style="padding: 10px 20px; margin-top: 20px; 
                                                 background: #1e628c; border: none; color: white; 
                                                 border-radius: 5px; cursor: pointer;">
