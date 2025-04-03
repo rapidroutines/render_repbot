@@ -354,53 +354,58 @@ class ExerciseCounter {
     }
 
     show_redirect_notice() {
-        // Create a notice that will display before redirecting
-        const noticeElement = document.createElement('div');
-        noticeElement.className = 'redirect-notice';
-        noticeElement.innerHTML = `
-            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-                        background: rgba(0, 0, 0, 0.7); z-index: 100; display: flex; 
-                        flex-direction: column; justify-content: center; align-items: center; color: white;">
-                <h2>No activity detected</h2>
-                <p>Redirecting to dashboard in <span id="countdown">5</span> seconds...</p>
-                <button id="stay-button" style="padding: 10px 20px; margin-top: 20px; 
-                                                background: #1e628c; border: none; color: white; 
-                                                border-radius: 5px; cursor: pointer;">
-                    Stay on this page
-                </button>
-            </div>
-        `;
+    // Create a notice that will display before redirecting
+    const noticeElement = document.createElement('div');
+    noticeElement.className = 'redirect-notice';
+    noticeElement.innerHTML = `
+        <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+                    background: rgba(0, 0, 0, 0.7); z-index: 100; display: flex; 
+                    flex-direction: column; justify-content: center; align-items: center; color: white;">
+            <h2>No activity detected</h2>
+            <p>Redirecting to dashboard in <span id="countdown">5</span> seconds...</p>
+            <button id="stay-button" style="padding: 10px 20px; margin-top: 20px; 
+                                            background: #1e628c; border: none; color: white; 
+                                            border-radius: 5px; cursor: pointer;">
+                Stay on this page
+            </button>
+        </div>
+    `;
+    
+    document.body.appendChild(noticeElement);
+    
+    // Add event listener to the stay button
+    document.getElementById('stay-button').addEventListener('click', () => {
+        // Remove the notice and reset the timer
+        if (noticeElement.parentNode) {
+            noticeElement.parentNode.removeChild(noticeElement);
+        }
+        this.reset_inactivity_timer();
+    });
+    
+    // Start the countdown
+    let secondsLeft = 5;
+    const countdownElement = document.getElementById('countdown');
+    
+    const countdownInterval = setInterval(() => {
+        secondsLeft--;
+        if (countdownElement) {
+            countdownElement.textContent = secondsLeft;
+        }
         
-        document.body.appendChild(noticeElement);
-        
-        // Add event listener to the stay button
-        document.getElementById('stay-button').addEventListener('click', () => {
-            // Remove the notice and reset the timer
-            if (noticeElement.parentNode) {
-                noticeElement.parentNode.removeChild(noticeElement);
-            }
-            this.reset_inactivity_timer();
-        });
-        
-        // Start the countdown
-        let secondsLeft = 5;
-        const countdownElement = document.getElementById('countdown');
-        
-        const countdownInterval = setInterval(() => {
-            secondsLeft--;
-            if (countdownElement) {
-                countdownElement.textContent = secondsLeft;
-            }
+        if (secondsLeft <= 0) {
+            clearInterval(countdownInterval);
             
-            if (secondsLeft <= 0) {
-                clearInterval(countdownInterval);
-                // Redirect to external URL
-                window.location.href = this.dashboardUrl;
+            // Force top-level navigation to break out of iframes
+            if (window.top !== window.self) {
+                // If we're in an iframe, we need to change the parent window location
+                window.top.location.href = this.dashboardUrl;
+            } else {
+                // Direct navigation if not in an iframe
+                window.location.replace(this.dashboardUrl);
             }
-        }, 1000);
-    }
+        }
+    }, 1000);
 }
-
 // Initialize when page loads
 document.addEventListener('DOMContentLoaded', () => {
     console.log("Initializing Exercise Counter...");
