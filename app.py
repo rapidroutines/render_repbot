@@ -1128,16 +1128,13 @@ def process_lunge(landmarks, state, current_time, rep_cooldown, hold_threshold):
 
 
 def process_russian_twist(landmarks, state, current_time, rep_cooldown, hold_threshold):
-    """Process landmarks for Russian Twist exercise"""
+    """Process landmarks for Russian Twist exercise with improved angle calculation and detection"""
     try:
-        # Get landmarks for shoulders, hips, and head
+        # Get landmarks for shoulders, hips, and wrists
         left_shoulder = landmarks[11]
         right_shoulder = landmarks[12]
         left_hip = landmarks[23]
         right_hip = landmarks[24]
-        nose = landmarks[0]
-        
-        # Also track hands/wrists for more precise twist detection
         left_wrist = landmarks[15]
         right_wrist = landmarks[16]
         
@@ -1145,123 +1142,112 @@ def process_russian_twist(landmarks, state, current_time, rep_cooldown, hold_thr
         angles = {}
         feedback = ""
         
-        # Calculate torso midpoints
-        shoulder_midpoint = {
-            'x': (left_shoulder['x'] + right_shoulder['x']) / 2,
-            'y': (left_shoulder['y'] + right_shoulder['y']) / 2
-        }
+        # Initialize tracking state if not exists
+        if 'twist_state' not in state:
+            state['twist_state'] = 'center'
+        if 'twist_direction' not in state:
+            state['twist_direction'] = 'none'
+        if 'left_complete' not in state:
+            state['left_complete'] = False
+        if 'right_complete' not in state:
+            state['right_complete'] = False
+        if 'prev_wrist_x' not in state:
+            state['prev_wrist_x'] = None
         
-        hip_midpoint = {
-            'x': (left_hip['x'] + right_hip['x']) / 2,
-            'y': (left_hip['y'] + right_hip['y']) / 2
-        }
+        # Calculate mid points
+        wrist_mid_x = (left_wrist['x'] + right_wrist['x']) / 2
+        shoulder_mid_x = (left_shoulder['x'] + right_shoulder['x']) / 2
         
-        # Calculate torso vector (from hips to shoulders)
-        torso_vector = {
-            'x': shoulder_midpoint['x'] - hip_midpoint['x'],
-            'y': shoulder_midpoint['y'] - hip_midpoint['y']
-        }
-        
-        # Calculate twist angle (using horizontal line as reference)
-        horizontal_vector = {'x': 1, 'y': 0}
-        
-        # Use dot product to find angle
-        dot_product = torso_vector['x'] * horizontal_vector['x']
-        torso_magnitude = math.sqrt(torso_vector['x']**2 + torso_vector['y']**2)
-        
-        if torso_magnitude == 0:
-            twist_angle = 0
+        # Calculate wrist distance from center (how far left/right the hands are)
+        # Normalize by shoulder width to account for different distances from camera
+        shoulder_width = abs(right_shoulder['x'] - left_shoulder['x'])
+        if shoulder_width > 0:
+            relative_wrist_position = (wrist_mid_x - shoulder_mid_x) / shoulder_width
         else:
-            twist_angle = math.acos(dot_product / torso_magnitude) * (180 / math.pi)
+            relative_wrist_position = 0
             
-            # Determine the direction of twist
-            if torso_vector['y'] < 0:
-                twist_angle = 360 - twist_angle
-        
-        # Store angle with position data
-        angles['Twist'] = {
-            'value': twist_angle,
+        # Store position for visualization
+        angles['WristPos'] = {
+            'value': relative_wrist_position * 100,  # Scale for display
             'position': {
-                'x': shoulder_midpoint['x'],
-                'y': shoulder_midpoint['y'] - 0.05
+                'x': wrist_mid_x,
+                'y': (left_wrist['y'] + right_wrist['y']) / 2 - 0.05
             }
         }
         
-        # Add tracking for direction changes if not exists
-        if 'twist_direction' not in state:
-            state['twist_direction'] = 'center'
-        if 'left_count' not in state:
-            state['left_count'] = 0
-        if 'right_count' not in state:
-            state['right_count'] = 0
-        if 'prev_angle' not in state:
-            state['prev_angle'] = twist_angle
-        
-        # Detect left and right twists
         # Set thresholds for twist detection
-        left_threshold = 70   # Angle for left twist
-        right_threshold = 110  # Angle for right twist
-        min_twist_change = 20 # Minimum change required to count as a new twist
+        left_threshold = -0.5  # Hands are significantly to the left
+        right_threshold = 0.5  # Hands are significantly to the right
+        center_range = 0.2     # Considered center when within this range of 0
         
-        # Simplified twist detection logic
-        # If we were in center position and now twisted left
-        if state['twist_direction'] == 'center' and twist_angle < left_threshold:
-            state['twist_direction'] = 'left'
-            feedback = "Twisting left"
-            
-        # If we were in center position and now twisted right
-        elif state['twist_direction'] == 'center' and twist_angle > right_threshold:
-            state['twist_direction'] = 'right'
-            feedback = "Twisting right"
-            
-        # If we were twisted left and now center/right
-        elif state['twist_direction'] == 'left' and twist_angle > left_threshold + 10:
-            state['twist_direction'] = 'center'
-            state['left_count'] += 1
-            feedback = "Left twist completed"
-            
-        # If we were twisted right and now center/left
-        elif state['twist_direction'] == 'right' and twist_angle < right_threshold - 10:
-            state['twist_direction'] = 'center'
-            state['right_count'] += 1
-            feedback = "Right twist completed"
+        # Previous state
+        prev_state = state['twist_state']
         
-        # Count a rep when we complete both left and right twists
-        if state['left_count'] > 0 and state['right_count'] > 0:
-            # We count a rep when we've done both a left and right twist
-            min_count = min(state['left_count'], state['right_count'])
+        # Detect twist state based on wrist position
+        if relative_wrist_position < left_threshold:
+            current_state = 'left'
+        elif relative_wrist_position > right_threshold:
+            current_state = 'right'
+        elif abs(relative_wrist_position) < center_range:
+            current_state = 'center'
+        else:
+            current_state = prev_state  # Maintain previous state if in transition
+        
+        # State transition logic
+        if prev_state != current_state:
+            # Track when a full side twist is completed
+            if prev_state == 'left' and (current_state == 'center' or current_state == 'right'):
+                state['left_complete'] = True
+                feedback = "Left twist complete"
+            elif prev_state == 'right' and (current_state == 'center' or current_state == 'left'):
+                state['right_complete'] = True
+                feedback = "Right twist complete"
+                
+            # Update state
+            state['twist_state'] = current_state
             
-            if min_count > state['repCounter']:
-                # If this is a new rep, increment counter
-                if current_time - state['lastRepTime'] > rep_cooldown:
-                    new_reps = min_count - state['repCounter']
-                    state['repCounter'] = min_count
-                    state['lastRepTime'] = current_time
-                    feedback = f"Rep {state['repCounter']} complete! Keep twisting!"
+            # Add direction feedback
+            if current_state == 'left':
+                feedback = "Twisting left"
+            elif current_state == 'right':
+                feedback = "Twisting right"
+            elif current_state == 'center':
+                feedback = "Returned to center"
         
-        # Store current angle for next comparison
-        state['prev_angle'] = twist_angle
+        # Count a rep when both left and right twists are completed
+        if state['left_complete'] and state['right_complete']:
+            if current_time - state['lastRepTime'] > rep_cooldown:
+                state['repCounter'] += 1
+                state['lastRepTime'] = current_time
+                feedback = f"Rep {state['repCounter']} complete!"
+                
+                # Reset for next rep
+                state['left_complete'] = False
+                state['right_complete'] = False
         
-        # Add visible counters
-        angles['LeftTwists'] = {
-            'value': state['left_count'],
+        # Add completion indicators
+        angles['LeftDone'] = {
+            'value': 1 if state['left_complete'] else 0,
             'position': {
                 'x': left_shoulder['x'] - 0.1,
                 'y': left_shoulder['y'] - 0.1
             }
         }
         
-        angles['RightTwists'] = {
-            'value': state['right_count'],
+        angles['RightDone'] = {
+            'value': 1 if state['right_complete'] else 0,
             'position': {
                 'x': right_shoulder['x'] + 0.1,
                 'y': right_shoulder['y'] - 0.1
             }
         }
         
+        # Store current wrist position for next comparison
+        state['prev_wrist_x'] = wrist_mid_x
+        
         return {
             'repCounter': state['repCounter'],
-            'stage': state['twist_direction'],
+            'stage': state['twist_state'],
             'feedback': feedback,
             'angles': angles
         }
@@ -1270,7 +1256,7 @@ def process_russian_twist(landmarks, state, current_time, rep_cooldown, hold_thr
         print(f"Error in Russian Twist detection: {str(e)}")
         return {
             'repCounter': state['repCounter'],
-            'stage': state.get('twist_direction', 'center'),
+            'stage': state.get('twist_state', 'center'),
             'feedback': f"Error: {str(e)}",
             'angles': {}
         }
