@@ -35,7 +35,7 @@ class ExerciseCounter {
         this.keyPoints = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]; // Head, shoulders, arms, hips, legs
 
         // Dashboard URL - direct external link
-        this.dashboardUrl = "https://render-repbot.vercel.app/";
+        this.dashboardUrl = "https://www.rapidroutines-dashboard.org/";
 
         // Setup canvas size responsively
         this.resize_canvas();
