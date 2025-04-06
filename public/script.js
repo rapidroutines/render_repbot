@@ -20,7 +20,7 @@ class ExerciseCounter {
         console.log("Session ID created:", this.sessionId);
         
         // Backend URL
-        this.backendUrl = "https://render-chatbot1-a8hc.onrender.com";
+        this.backendUrl = "https://render-repbot.onrender.com";
 
         // Inactivity tracking
         this.lastActivityTime = Date.now();
