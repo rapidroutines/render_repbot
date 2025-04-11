@@ -46,6 +46,9 @@ class ExerciseCounter {
         document.addEventListener('keydown', resetActivity);
         document.addEventListener('click', resetActivity);
         document.addEventListener('touchstart', resetActivity);
+        
+        // Add localStorage change observer
+        this.setupLocalStorageMonitor();
     }
 
     handle_exercise_change() {
@@ -236,8 +239,27 @@ class ExerciseCounter {
                                 repCount: repsDifference
                             }, "*"); // Using * for postMessage target origin to work with any parent
                         }
+                        
+                        // Also store in localStorage as a backup mechanism
+                        const exerciseData = {
+                            type: this.exerciseSelector.value,
+                            count: repsDifference,
+                            timestamp: new Date().toISOString(),
+                            processed: false
+                        };
+                        localStorage.setItem("repbot_lastExercise", JSON.stringify(exerciseData));
+                        
+                        // Trigger storage event manually for same-origin windows
+                        if (typeof StorageEvent === "function") {
+                            const storageEvent = new StorageEvent("storage", {
+                                key: "repbot_lastExercise",
+                                newValue: JSON.stringify(exerciseData),
+                                url: window.location.href
+                            });
+                            window.dispatchEvent(storageEvent);
+                        }
                     } catch (e) {
-                        console.error("Error sending message to parent:", e);
+                        console.error("Error sending exercise completion message:", e);
                     }
                 }
             }
@@ -290,6 +312,54 @@ class ExerciseCounter {
                 this.ctx.fillText(text, x, y - 7);
             }
         }
+    }
+
+    setupLocalStorageMonitor() {
+        // This function sets up monitoring for rep count and exercise changes
+        setInterval(() => {
+            const currentRepCount = parseInt(this.repDisplay.innerText || "0");
+            const currentExerciseType = this.exerciseSelector.value;
+            
+            // Check if the rep count has increased since last reported
+            if (currentRepCount > this.lastReportedRepCount) {
+                // Calculate how many new reps were completed
+                const newReps = currentRepCount - this.lastReportedRepCount;
+                
+                // Store the exercise completion in localStorage
+                const exerciseData = {
+                    type: currentExerciseType,
+                    count: newReps,
+                    timestamp: new Date().toISOString(),
+                    processed: false
+                };
+                
+                // Save to localStorage
+                localStorage.setItem("repbot_lastExercise", JSON.stringify(exerciseData));
+                
+                // Update last reported values
+                this.lastReportedRepCount = currentRepCount;
+                this.lastReportedExerciseType = currentExerciseType;
+                
+                // Notify parent window (React app) about completed exercise
+                try {
+                    if (window.parent && window.parent !== window) {
+                        window.parent.postMessage({
+                            type: "exerciseCompleted",
+                            exerciseType: currentExerciseType,
+                            repCount: newReps
+                        }, "*");
+                    }
+                } catch (e) {
+                    console.error("Error sending message to parent:", e);
+                }
+            }
+            
+            // Check if exercise type has changed
+            if (currentExerciseType !== this.lastReportedExerciseType) {
+                this.lastReportedExerciseType = currentExerciseType;
+                this.lastReportedRepCount = currentRepCount; // Reset last reported count for new exercise
+            }
+        }, 500);
     }
 
     start_inactivity_timer() {
