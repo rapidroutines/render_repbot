@@ -32,6 +32,13 @@ class ExerciseCounter {
         // Track rep count history to detect changes
         this.lastReportedRepCount = 0;
         this.lastReportedExerciseType = "";
+        
+        // Set to store rep counts already reported to prevent duplicates
+        this.reportedReps = new Set();
+        
+        // Throttle notification sending to prevent rapid-fire notifications
+        this.lastNotificationTime = 0;
+        this.notificationThrottleMs = 2000; // Minimum 2 seconds between notifications
 
         this.resize_canvas();
         window.addEventListener('resize', this.resize_canvas.bind(this));
@@ -46,9 +53,6 @@ class ExerciseCounter {
         document.addEventListener('keydown', resetActivity);
         document.addEventListener('click', resetActivity);
         document.addEventListener('touchstart', resetActivity);
-        
-        // Add localStorage change observer
-        this.setupLocalStorageMonitor();
     }
 
     handle_exercise_change() {
@@ -57,6 +61,7 @@ class ExerciseCounter {
         this.stage = "down";
         this.lastReportedRepCount = 0;
         this.lastReportedExerciseType = this.exerciseSelector.value;
+        this.reportedReps.clear(); // Clear reported reps set for new exercise
         
         if (this.feedbackDisplay) {
             this.feedbackDisplay.innerText = '';
@@ -226,42 +231,54 @@ class ExerciseCounter {
             if (result.repCounter !== undefined && this.repCounter !== result.repCounter) {
                 this.reset_inactivity_timer();
                 
-                // Rep count has increased
-                const repsDifference = result.repCounter - this.repCounter;
+                // Calculate reps just completed in this update
+                const oldRepCount = this.repCounter;
+                const newRepCount = result.repCounter;
+                const repsDifference = newRepCount - oldRepCount;
                 
+                // Only send notification for actual rep increases
                 if (repsDifference > 0) {
-                    // Notify parent window (React app) about completed exercise
-                    try {
-                        if (window.parent && window.parent !== window) {
-                            window.parent.postMessage({
-                                type: "exerciseCompleted",
-                                exerciseType: this.exerciseSelector.value,
-                                repCount: repsDifference
-                            }, "*"); // Using * for postMessage target origin to work with any parent
-                        }
+                    // Create a unique identifier for this rep event to prevent duplicates
+                    const repEventId = `${this.exerciseSelector.value}_${oldRepCount}_to_${newRepCount}`;
+                    
+                    // Only process if we haven't seen this exact rep event before
+                    if (!this.reportedReps.has(repEventId)) {
+                        this.reportedReps.add(repEventId);
                         
-                        // Also store in localStorage as a backup mechanism
-                        const exerciseData = {
-                            type: this.exerciseSelector.value,
-                            count: repsDifference,
-                            timestamp: new Date().toISOString(),
-                            processed: false
-                        };
-                        localStorage.setItem("repbot_lastExercise", JSON.stringify(exerciseData));
-                        
-                        // Trigger storage event manually for same-origin windows
-                        if (typeof StorageEvent === "function") {
-                            const storageEvent = new StorageEvent("storage", {
-                                key: "repbot_lastExercise",
-                                newValue: JSON.stringify(exerciseData),
-                                url: window.location.href
-                            });
-                            window.dispatchEvent(storageEvent);
+                        // Check if we can send a notification (throttled)
+                        const now = Date.now();
+                        if (now - this.lastNotificationTime >= this.notificationThrottleMs) {
+                            this.lastNotificationTime = now;
+                            
+                            // Notify parent window (React app) about completed exercise
+                            try {
+                                if (window.parent && window.parent !== window) {
+                                    window.parent.postMessage({
+                                        type: "exerciseCompleted",
+                                        exerciseType: this.exerciseSelector.value,
+                                        repCount: repsDifference
+                                    }, "*"); // Using * for postMessage target origin to work with any parent
+                                }
+                                
+                                // Also store in localStorage as a backup mechanism
+                                const exerciseData = {
+                                    type: this.exerciseSelector.value,
+                                    count: repsDifference,
+                                    timestamp: new Date().toISOString(),
+                                    processed: false,
+                                    id: repEventId // Include ID for deduplication
+                                };
+                                localStorage.setItem("repbot_lastExercise", JSON.stringify(exerciseData));
+                            } catch (e) {
+                                console.error("Error sending exercise completion message:", e);
+                            }
                         }
-                    } catch (e) {
-                        console.error("Error sending exercise completion message:", e);
                     }
                 }
+                
+                // Update rep counter display
+                this.repCounter = newRepCount;
+                this.repDisplay.innerText = this.repCounter;
             }
             
             this.update_ui_from_response(result);
@@ -273,11 +290,6 @@ class ExerciseCounter {
     }
 
     update_ui_from_response(result) {
-        if (result.repCounter !== undefined && this.repCounter !== result.repCounter) {
-            this.repCounter = result.repCounter;
-            this.repDisplay.innerText = this.repCounter;
-        }
-
         if (result.stage !== undefined) {
             this.stage = result.stage;
         }
@@ -312,54 +324,6 @@ class ExerciseCounter {
                 this.ctx.fillText(text, x, y - 7);
             }
         }
-    }
-
-    setupLocalStorageMonitor() {
-        // This function sets up monitoring for rep count and exercise changes
-        setInterval(() => {
-            const currentRepCount = parseInt(this.repDisplay.innerText || "0");
-            const currentExerciseType = this.exerciseSelector.value;
-            
-            // Check if the rep count has increased since last reported
-            if (currentRepCount > this.lastReportedRepCount) {
-                // Calculate how many new reps were completed
-                const newReps = currentRepCount - this.lastReportedRepCount;
-                
-                // Store the exercise completion in localStorage
-                const exerciseData = {
-                    type: currentExerciseType,
-                    count: newReps,
-                    timestamp: new Date().toISOString(),
-                    processed: false
-                };
-                
-                // Save to localStorage
-                localStorage.setItem("repbot_lastExercise", JSON.stringify(exerciseData));
-                
-                // Update last reported values
-                this.lastReportedRepCount = currentRepCount;
-                this.lastReportedExerciseType = currentExerciseType;
-                
-                // Notify parent window (React app) about completed exercise
-                try {
-                    if (window.parent && window.parent !== window) {
-                        window.parent.postMessage({
-                            type: "exerciseCompleted",
-                            exerciseType: currentExerciseType,
-                            repCount: newReps
-                        }, "*");
-                    }
-                } catch (e) {
-                    console.error("Error sending message to parent:", e);
-                }
-            }
-            
-            // Check if exercise type has changed
-            if (currentExerciseType !== this.lastReportedExerciseType) {
-                this.lastReportedExerciseType = currentExerciseType;
-                this.lastReportedRepCount = currentRepCount; // Reset last reported count for new exercise
-            }
-        }, 500);
     }
 
     start_inactivity_timer() {
