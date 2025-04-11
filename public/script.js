@@ -14,7 +14,6 @@ class ExerciseCounter {
         this.camera = null;
         
         this.sessionId = 'user_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
-        console.log("Session ID created:", this.sessionId);
         
         this.backendUrl = "https://render-repbot.onrender.com";
 
@@ -46,7 +45,6 @@ class ExerciseCounter {
     }
 
     handle_exercise_change() {
-        console.log("Exercise changed to:", this.exerciseSelector.value);
         this.repCounter = 0;
         this.repDisplay.innerText = '0';
         this.stage = "down";
@@ -67,7 +65,6 @@ class ExerciseCounter {
     }
 
     initialize_pose() {
-        console.log('Initializing MediaPipe Pose...');
         this.pose = new Pose({
             locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
         });
@@ -80,13 +77,11 @@ class ExerciseCounter {
         });
 
         this.pose.onResults(this.on_results.bind(this));
-        console.log('MediaPipe initialized successfully');
     }
 
     async start_camera() {
         try {
             this.startButton.style.display = 'none';
-            console.log("Starting camera...");
 
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 throw new Error('getUserMedia is not supported in this browser');
@@ -116,12 +111,10 @@ class ExerciseCounter {
             });
 
             await this.camera.start();
-            console.log("Camera started successfully");
 
             this.start_inactivity_timer();
 
         } catch (error) {
-            console.error('Error starting camera:', error);
             this.show_camera_error(error.message);
             this.startButton.style.display = 'block';
         }
@@ -227,7 +220,6 @@ class ExerciseCounter {
             
             this.update_ui_from_response(result);
         } catch (error) {
-            console.error('Error sending landmarks to backend:', error);
             if (this.feedbackDisplay) {
                 this.feedbackDisplay.innerText = `Connection error: ${error.message}`;
             }
@@ -278,7 +270,6 @@ class ExerciseCounter {
 
     start_inactivity_timer() {
         this.reset_inactivity_timer();
-        console.log("Inactivity timer started");
     }
 
     reset_inactivity_timer() {
@@ -297,7 +288,6 @@ class ExerciseCounter {
         const inactiveTime = Date.now() - this.lastActivityTime;
         
         if (inactiveTime >= this.inactivityTimeout) {
-            console.log("User inactive, redirecting to RepBot Start Screen...");
             this.show_redirect_notice();
         }
     }
@@ -346,6 +336,5 @@ class ExerciseCounter {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log("Initializing Exercise Counter...");
     new ExerciseCounter();
 });
