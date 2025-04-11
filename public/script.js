@@ -16,12 +16,10 @@ class ExerciseCounter {
         this.sessionId = 'user_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
         console.log("Session ID created:", this.sessionId);
         
-        // Backend URL
         this.backendUrl = "https://render-repbot.onrender.com";
 
-        // Inactivity tracking
         this.lastActivityTime = Date.now();
-        this.inactivityTimeout = 180000; // 3 minutes 
+        this.inactivityTimeout = 180000; 
         this.inactivityTimer = null;
         this.lastLandmarks = null;
         this.noMovementFrames = 0;
@@ -32,18 +30,14 @@ class ExerciseCounter {
 
         this.redirectUrl = "https://render-repbot.vercel.app/";
 
-        // Setup canvas size responsively
         this.resize_canvas();
         window.addEventListener('resize', this.resize_canvas.bind(this));
 
-        // Initialize MediaPipe Pose
         this.initialize_pose();
 
-        // Event listeners
         this.exerciseSelector.addEventListener('change', this.handle_exercise_change.bind(this));
         this.startButton.addEventListener('click', this.start_camera.bind(this));
         
-        // Bind activity reset events
         const resetActivity = this.reset_inactivity_timer.bind(this);
         document.addEventListener('mousemove', resetActivity);
         document.addEventListener('keydown', resetActivity);
