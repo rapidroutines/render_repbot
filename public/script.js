@@ -28,6 +28,10 @@ class ExerciseCounter {
         this.keyPoints = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]; 
 
         this.redirectUrl = "https://render-repbot.vercel.app/";
+        
+        // Track rep count history to detect changes
+        this.lastReportedRepCount = 0;
+        this.lastReportedExerciseType = "";
 
         this.resize_canvas();
         window.addEventListener('resize', this.resize_canvas.bind(this));
@@ -48,6 +52,8 @@ class ExerciseCounter {
         this.repCounter = 0;
         this.repDisplay.innerText = '0';
         this.stage = "down";
+        this.lastReportedRepCount = 0;
+        this.lastReportedExerciseType = this.exerciseSelector.value;
         
         if (this.feedbackDisplay) {
             this.feedbackDisplay.innerText = '';
@@ -216,6 +222,24 @@ class ExerciseCounter {
             
             if (result.repCounter !== undefined && this.repCounter !== result.repCounter) {
                 this.reset_inactivity_timer();
+                
+                // Rep count has increased
+                const repsDifference = result.repCounter - this.repCounter;
+                
+                if (repsDifference > 0) {
+                    // Notify parent window (React app) about completed exercise
+                    try {
+                        if (window.parent && window.parent !== window) {
+                            window.parent.postMessage({
+                                type: "exerciseCompleted",
+                                exerciseType: this.exerciseSelector.value,
+                                repCount: repsDifference
+                            }, "*"); // Using * for postMessage target origin to work with any parent
+                        }
+                    } catch (e) {
+                        console.error("Error sending message to parent:", e);
+                    }
+                }
             }
             
             this.update_ui_from_response(result);
