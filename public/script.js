@@ -29,16 +29,13 @@ class ExerciseCounter {
 
         this.redirectUrl = "https://render-repbot.vercel.app/";
         
-        // Track rep count history to detect changes
         this.lastReportedRepCount = 0;
         this.lastReportedExerciseType = "";
         
-        // Set to store rep counts already reported to prevent duplicates
         this.reportedReps = new Set();
         
-        // Throttle notification sending to prevent rapid-fire notifications
         this.lastNotificationTime = 0;
-        this.notificationThrottleMs = 2000; // Minimum 2 seconds between notifications
+        this.notificationThrottleMs = 2000; 
 
         this.resize_canvas();
         window.addEventListener('resize', this.resize_canvas.bind(this));
@@ -61,7 +58,7 @@ class ExerciseCounter {
         this.stage = "down";
         this.lastReportedRepCount = 0;
         this.lastReportedExerciseType = this.exerciseSelector.value;
-        this.reportedReps.clear(); // Clear reported reps set for new exercise
+        this.reportedReps.clear(); 
         
         if (this.feedbackDisplay) {
             this.feedbackDisplay.innerText = '';
@@ -231,42 +228,35 @@ class ExerciseCounter {
             if (result.repCounter !== undefined && this.repCounter !== result.repCounter) {
                 this.reset_inactivity_timer();
                 
-                // Calculate reps just completed in this update
                 const oldRepCount = this.repCounter;
                 const newRepCount = result.repCounter;
                 const repsDifference = newRepCount - oldRepCount;
                 
-                // Only send notification for actual rep increases
                 if (repsDifference > 0) {
-                    // Create a unique identifier for this rep event to prevent duplicates
                     const repEventId = `${this.exerciseSelector.value}_${oldRepCount}_to_${newRepCount}`;
                     
-                    // Only process if we haven't seen this exact rep event before
                     if (!this.reportedReps.has(repEventId)) {
                         this.reportedReps.add(repEventId);
                         
-                        // Check if we can send a notification (throttled)
                         const now = Date.now();
                         if (now - this.lastNotificationTime >= this.notificationThrottleMs) {
                             this.lastNotificationTime = now;
                             
-                            // Notify parent window (React app) about completed exercise
                             try {
                                 if (window.parent && window.parent !== window) {
                                     window.parent.postMessage({
                                         type: "exerciseCompleted",
                                         exerciseType: this.exerciseSelector.value,
                                         repCount: repsDifference
-                                    }, "*"); // Using * for postMessage target origin to work with any parent
+                                    }, "*"); 
                                 }
                                 
-                                // Also store in localStorage as a backup mechanism
                                 const exerciseData = {
                                     type: this.exerciseSelector.value,
                                     count: repsDifference,
                                     timestamp: new Date().toISOString(),
                                     processed: false,
-                                    id: repEventId // Include ID for deduplication
+                                    id: repEventId 
                                 };
                                 localStorage.setItem("repbot_lastExercise", JSON.stringify(exerciseData));
                             } catch (e) {
@@ -276,7 +266,6 @@ class ExerciseCounter {
                     }
                 }
                 
-                // Update rep counter display
                 this.repCounter = newRepCount;
                 this.repDisplay.innerText = this.repCounter;
             }
