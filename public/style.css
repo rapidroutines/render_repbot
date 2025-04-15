@@ -3,22 +3,16 @@ body {
     padding: 0;
     font-family: Arial, sans-serif;
     background-color: white;
-    overflow: hidden; /* Changed from overflow-x to prevent all scrolling */
+    overflow-x: hidden;
     position: relative;
-    height: 100vh; /* Ensure body takes full viewport height */
-    width: 100vw; /* Ensure body takes full viewport width */
-    display: flex;
-    justify-content: center;
-    align-items: center;
 }
   
 .exercise-counter-container {
     position: relative;
-    width: 90vw; /* Use viewport width instead of fixed width */
-    max-width: 900px; /* Increased from 700px */
-    height: 90vh; /* Use viewport height instead of fixed height */
-    max-height: 900px;
-    margin: 0 auto; /* Removed top/bottom margin */
+    width: 100%;
+    max-width: 700px;
+    height: 800px; /* Increased from 600px to 800px */
+    margin: 20px auto;
     overflow: hidden;
     border-radius: 8px;
     border: 1px solid black;
@@ -134,26 +128,22 @@ body:not(.menu-open) .exercise-counter-container {
 @media (max-width: 768px) {
     body {
         width: 100% !important;
-        height: 100vh !important;
         position: relative !important;
-        overflow: hidden !important;
-        display: flex;
-        justify-content: center;
-        align-items: center;
+        overflow-x: hidden !important;
     }
   
     html, body {
         max-width: 100%;
-        max-height: 100%;
-        overflow: hidden;
+        overflow-x: hidden;
     }
   
     .exercise-counter-container {
-        width: 95vw !important;
-        height: 95vh !important;
+        height: auto;
+        padding-bottom: 133%; /* Adjusted from 100% to account for taller container on desktop */
         position: relative !important;
-        margin: 0 auto !important;
-        padding-bottom: 0; /* Removed padding-bottom that was causing overflow */
+        margin-left: auto !important;
+        margin-right: auto !important;
+        width: calc(100% - 20px) !important;
         max-width: 700px !important;
         left: auto !important;
         right: auto !important;
