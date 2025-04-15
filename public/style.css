@@ -3,16 +3,22 @@ body {
     padding: 0;
     font-family: Arial, sans-serif;
     background-color: white;
-    overflow-x: hidden;
+    overflow: hidden; /* Changed from overflow-x to prevent all scrolling */
     position: relative;
+    height: 100vh; /* Ensure body takes full viewport height */
+    width: 100vw; /* Ensure body takes full viewport width */
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
   
 .exercise-counter-container {
     position: relative;
-    width: 100%;
-    max-width: 700px;
-    height: 600px;
-    margin: 20px auto;
+    width: 90vw; /* Use viewport width instead of fixed width */
+    max-width: 900px; /* Increased from 700px */
+    height: 90vh; /* Use viewport height instead of fixed height */
+    max-height: 900px;
+    margin: 0 auto; /* Removed top/bottom margin */
     overflow: hidden;
     border-radius: 8px;
     border: 1px solid black;
@@ -128,23 +134,27 @@ body:not(.menu-open) .exercise-counter-container {
 @media (max-width: 768px) {
     body {
         width: 100% !important;
+        height: 100vh !important;
         position: relative !important;
-        overflow-x: hidden !important;
+        overflow: hidden !important;
+        display: flex;
+        justify-content: center;
+        align-items: center;
     }
   
     html, body {
         max-width: 100%;
-        overflow-x: hidden;
+        max-height: 100%;
+        overflow: hidden;
     }
   
     .exercise-counter-container {
-        height: auto;
-        padding-bottom: 100%;
+        width: 95vw !important;
+        height: 95vh !important;
         position: relative !important;
-        margin-left: auto !important;
-        margin-right: auto !important;
-        width: calc(100% - 20px) !important;
-        max-width: 700px !important;
+        margin: 0 auto !important;
+        padding-bottom: 0; /* Removed padding-bottom that was causing overflow */
+        max-width: 900px !important;
         left: auto !important;
         right: auto !important;
         transform: none !important;
