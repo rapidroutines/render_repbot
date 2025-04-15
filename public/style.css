@@ -11,7 +11,7 @@ body {
     position: relative;
     width: 100%;
     max-width: 700px;
-    height: 800px; /* Increased from 600px to 800px */
+    height: 600px;
     margin: 20px auto;
     overflow: hidden;
     border-radius: 8px;
@@ -139,7 +139,7 @@ body:not(.menu-open) .exercise-counter-container {
   
     .exercise-counter-container {
         height: auto;
-        padding-bottom: 133%; /* Adjusted from 100% to account for taller container on desktop */
+        padding-bottom: 100%;
         position: relative !important;
         margin-left: auto !important;
         margin-right: auto !important;
