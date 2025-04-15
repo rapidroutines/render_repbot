@@ -11,7 +11,7 @@ body {
     position: relative;
     width: 100%;
     max-width: 700px;
-    height: 600px; /* Increased height from 600px to 750px */
+    height: 600px;
     margin: 20px auto;
     overflow: hidden;
     border-radius: 8px;
@@ -125,21 +125,12 @@ body:not(.menu-open) .exercise-counter-container {
     word-wrap: break-word;
 }
   
-/* Responsive adjustments for mobile */
 @media (max-width: 768px) {
-    .exercise-counter-container {
-        height: 85vh; /* Use viewport height for better mobile sizing */
-        padding-bottom: 0; /* Remove bottom padding that causes scrolling */
+    body {
+        width: 100% !important;
         position: relative !important;
-        margin-left: auto !important;
-        margin-right: auto !important;
-        width: calc(100% - 20px) !important;
-        max-width: 700px !important;
-        left: auto !important;
-        right: auto !important;
-        transform: none !important;
+        overflow-x: hidden !important;
     }
-}
   
     html, body {
         max-width: 100%;
