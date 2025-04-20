@@ -32,7 +32,6 @@ class ExerciseCounter {
         this.lastReportedRepCount = 0;
         this.lastReportedExerciseType = "";
         
-        // Track reported reps to prevent duplicates
         this.reportedReps = new Set();
         
         this.lastNotificationTime = 0;
@@ -54,7 +53,6 @@ class ExerciseCounter {
     }
 
     handle_exercise_change() {
-        // Reset everything on exercise change
         this.repCounter = 0;
         this.repDisplay.innerText = '0';
         this.stage = "down";
@@ -245,7 +243,6 @@ class ExerciseCounter {
                             this.lastNotificationTime = now;
                             
                             try {
-                                // Send completed exercise data to parent window
                                 if (window.parent && window.parent !== window) {
                                     window.parent.postMessage({
                                         type: "exerciseCompleted",
@@ -254,8 +251,6 @@ class ExerciseCounter {
                                     }, "*"); 
                                 }
                                 
-                                // We no longer save to localStorage
-                                // Instead, rely on the message event to pass data to the parent frame
                             } catch (e) {
                                 console.error("Error sending exercise completion message:", e);
                             }
